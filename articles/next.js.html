@@ -1,0 +1,609 @@
+<!DOCTYPE html><html lang="zh-CN" class="scroll-smooth dark"><head><meta charSet="utf-8"/><meta charSet="utf-8"/><link rel="stylesheet" href="/_next/static/css/26351ac1a6eca06c.css" data-precedence="next"/><link rel="stylesheet" href="/_next/static/css/7f6bd37aab40623f.css" data-precedence="next"/><title>HAN Blog</title><meta name="description" content="Created by HAN"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="icon" href="\favicon.ico" type="image/x-icon" sizes="any"/><script src="/_next/static/chunks/polyfills-c67a75d1b6f99dc8.js" noModule=""></script></head><body><div class="mx-auto max-w-3xl px-4 sm:px-6 xl:max-w-5xl xl:px-0"><div class="h-screen flex flex-col justify-between"><header class="flex items-center justify-around py-10"><div><a href="/"><div class="flex items-center justify-between"><div class="hidden h-6 text-2xl font-semibold sm:block"><a>HAN个人博客</a></div></div></a></div><div class="flex items-center text-base leading-5"><div class="hidden sm:block"><a class="p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4" href="/">主页</a><a class="p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4" href="/articles">文章</a><a class="p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4" href="/about">关于</a></div></div><div></div></header><main class="mb-auto"><main><div class="flex justify-center"><div class="prose dark:prose-invert mt-10"><h1>使用 Next.js 和掘金 API 打造个性博客</h1><div class="items-center"><a href="articles">返回文档列表</a></div><div><blockquote>
+<p>文章为稀土掘金技术社区首发签约文章，14 天内禁止转载，14 天后未获授权禁止转载，侵权必究！</p>
+</blockquote>
+<h2>阅读本文，你将收获:</h2>
+<ul>
+<li>
+<p>通过 chrome 调试工具获得掘金 api</p>
+</li>
+<li>
+<p>学会使用 Next.js 服务端渲染</p>
+</li>
+<li>
+<p>学会使用 Tailwindcss 来代替原生 css</p>
+</li>
+<li>
+<p>在几分钟内就可以部署一个自己的博客</p>
+</li>
+</ul>
+<h2>背景</h2>
+<p>在开始之前，我想先问下各位，是否有自建博客？很多人选择在社区写博客，比如：掘金，因为在社区写博客能够第一时间被人看到，能够第一时间把知识分享出去，也可以在第一时间得到他们反馈和评论。
+但在社区写博客也有劣势，比如掘金社区只能写技术文章，并不能完全展现你自己的个性。比如，我是一名前端开发者，在社区看我的文章，只能体现我是一名前端，但同时我又是一名摄影爱好者，这点就没办法体现了，所以这就是自建博客的优势，有非常高的灵活度，可以自己设计想要的风格和模块。但自建博客也有非常大的劣势，第一点就是部署到服务器，有一定花费，其次就是新建博客几乎没流量，所以我们需要在各大社区论坛发表文章，给自己的博客引流。这样一来，就迎来另一个问题，我需要在两个地方发表，这不就是重复劳动吗？</p>
+<p>接下来，我就分享下我的方法，通过掘金 API 打造个性博客，只要在掘金发表文章，就会自动同步到自己的博客中。</p>
+<p>本文涉及的代码都在<a href="https://github.com/maqi1520/nextjs-juejin-blog" title="nextjs-juejin-blog">这个 Github 仓库</a>中。</p>
+<h2>获取掘金 API</h2>
+<p>打开掘金主页，使用 chrome devtools 很容易可以找到获取文章列表的接口。</p>
+<p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/eeff54e385ec4f06a0e2f47d20b644d6~tplv-k3u1fbpfcp-zoom-1.image" alt="devtools 查看文章列表接口"></p>
+<p>可以看到接口返回了文章列表数据 <code>data</code>，文章总数 <code>count</code>，以及当前的分页游标 <code>cursor</code></p>
+<p>我们使用 axios 在 nodejs 中请求数据，封装成一个 <code>getArticles</code> 方法</p>
+<pre><code>export async function getArticles(uid: string, cursor: number = 0) {
+  const res = await axios.post('https://api.juejin.cn/content_api/v1/article/query_list', {
+    cursor: cursor + '',
+    sort_type: 2,
+    user_id: uid + '',
+  })
+
+  return res.data
+}
+</code></pre>
+<p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/5a16e5d6260b4a84a1f095fd24563951~tplv-k3u1fbpfcp-zoom-1.image" alt="devtools 查看文章详情接口"></p>
+<p>通过查看文章详情页，我们可以复制出接口，使用 axios 修改下，封装成 <code>getArticleDetail</code> 方法</p>
+<pre><code>export async function getArticleDetail(article_id: string) {
+  const res = await axios.post('https://api.juejin.cn/content_api/v1/article/detail', {
+    article_id,
+  })
+
+  return res.data
+}
+</code></pre>
+<p>有了接口，我们就可以用它来搭建自己的博客了。</p>
+<h2>初始化项目</h2>
+<p>接下来，我们将从零开始创建一个 next 项目，并且选择 Typescript 模板</p>
+<pre><code>npx create-next-app --ts nextjs-juejin-blog
+cd nextjs-juejin-blog
+yarn dev
+</code></pre>
+<p>创建项目后，脚手架会帮我们自动执行 <code>yarn install</code>。</p>
+<p>打开 http://localhost:3000/ 你将看到如下页面</p>
+<p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/e7c8c4d0f3664167be138dd3fab69314~tplv-k3u1fbpfcp-zoom-1.image" alt="Next.js 默认页面"></p>
+<h2>添加 Tailwind CSS</h2>
+<p>Tailwind CSS 是一个 CSS 原子类样式框架，我们可以使用现成的样式， 比如<code>flex</code>、<code>text-3xl</code>、<code>mr-3</code> 等等，并且这些 CSS 会在构建的时候，打包出最小的样式文件。没接触过的小伙伴，一开始可能会不习惯，但写完一个项目后，你会爱不释手，因为所有的 CSS 都在组件中，并且一目了然。如果你之前的项目中使用的是 CSS modules，当项目变得复杂后，若没维护好的话，到最后可能会面向 vscode 搜索编程。</p>
+<p>在开始之前，你首先需要的 VSCODE 中安装 <a href="https://marketplace.visualstudio.com/items?itemName=bradlc.vscode-tailwindcss" title="Tailwind CSS IntelliSense">Tailwind CSS IntelliSense</a> 插件，这样在你写 class 的时候，就会有智能提示，鼠标移动到 class 上，也可以看到具体的 CSS 属性。</p>
+<p><img src="https://p6-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/3b08a4f2d1594af3ab51a5c2648380e4~tplv-k3u1fbpfcp-watermark.image?" alt="Tailwind CSS IntelliSense"></p>
+<p>接下来，我们可以在命令行中运行下面命令</p>
+<ol>
+<li>安装 npm 包</li>
+</ol>
+<pre><code>yarn add -D tailwindcss postcss autoprefixer
+</code></pre>
+<p>Tailwindcss 的编译依赖 postcss，autoprefixer 会自动根据 <code>Can I Use</code> 标准给 CSS 属性添加浏览器适配前缀。</p>
+<ol start="2">
+<li>初始化 <code>tailwind.config.js</code> 配置文件</li>
+</ol>
+<pre><code>npx tailwindcss init -p
+</code></pre>
+<ol start="3">
+<li>修改 <code>tailwind.config.js</code> 配置文件，修改下 <code>content</code> 字段构建，修改后，只会打包 content 中匹配文件使用到的 class</li>
+</ol>
+<pre><code>const colors = require('tailwindcss/colors')
+
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: ['./src/**/*.tsx'],
+  theme: {
+    extend: {
+      colors: {
+        primary: colors.indigo,
+        //@ts-ignore
+        gray: colors.neutral, // TODO: Remove ts-ignore after tw types gets updated to v3
+      },
+    },
+  },
+  plugins: [],
+}
+</code></pre>
+<p>扩展一个 <code>primary color</code>，主色调统一使用这个，方便后续不同的人使用这个模板，可以方便地修改主色</p>
+<p>调整下目录，将主要的代码目录都移动到 <code>src</code> 下</p>
+<pre><code>mkdir src
+mkdir src/components
+mv styles src
+mv pages src
+</code></pre>
+<p>这点是个人爱好，你可以遵循原来的目录。</p>
+<ol start="4">
+<li>修改 <code>/src/styles/globals.css</code> 中的 CSS</li>
+</ol>
+<pre><code>@tailwind base;
+@tailwind components;
+@tailwind utilities;
+</code></pre>
+<p><code>@tailwind</code> 指令会在运行的时候生成默认样式。</p>
+<h2>约定式路由</h2>
+<p>在 <code>pages</code> 或者 <code>src/pages</code> 文件夹下建立文件或文件夹，Next.js 会帮我自动创建路由系统。</p>
+<p>比如我们创建如下目录结构：</p>
+<pre><code>src/pages
+├── _app.tsx
+├── api
+│   └── hello.ts
+├── blog
+│   ├── [...slug].tsx
+│   └── page
+│       └── [page].tsx
+├── blog.tsx
+└── index.tsx
+</code></pre>
+<p>就会创建如下路由</p>
+<pre><code>/api/hello
+/blog/page/:page
+/blog/:slug
+/blog
+</code></pre>
+<ul>
+<li>其中 <code>[page]</code> 是变量，可以匹配任意值，那么我们的路由就是： <code>/blog/page/1</code>;</li>
+<li><code>[...slug]</code> 是多层变量，可以匹配<code>/blog/a</code>、<code>/blog/a/b</code>、<code>/blog/a/b/c</code> 等等。</li>
+</ul>
+<h2>服务端渲染</h2>
+<p>在 Next.js 中，在 Page 页面中可以导出一个 <code>getServerSideProps</code> 方法，用于服务端获取数据。</p>
+<p>下面我们来实现下博客列表页面，需要获取 <code>url</code> 上的翻页参数</p>
+<pre><code>import React from 'react'
+import { GetServerSidePropsContext } from 'next'
+import { getArticles } from '../lib/db'
+import { InferGetServerSidePropsType } from 'next'
+
+export default function Page({
+  data,
+  count,
+  page,
+}: InferGetServerSidePropsType&#x3C;typeof getServerSideProps>) {
+  // Render data...
+  console.log(data)
+}
+
+// 每次刷新页面都后执行这个函数
+export async function getServerSideProps(context: GetServerSidePropsContext) {
+  const page = (context.query?.page as string) || 1
+  // 通过 API 请求数据
+  const uid = process.env.uid!
+  const { data, count } = await getArticles(uid, (+page - 1) * 10)
+
+  // 将数据传递到页面上
+  return { props: { data, count, page: +page } }
+}
+</code></pre>
+<p>新建一个<code>.env</code> 文件，将掘金的 ID 设置为 uid，我们就可以在 nodejs 中通过<code>process.env</code>获取这个值。</p>
+<p>此时的 data 就是文章列表数据，复制其中一条数据，使用<a href="https://www.runjs.cool/json-to-typescript" title="json-to-typescript">工具</a>将 json 转为 typescript 类型，删除一些我们不需要的字段，我们就可以得到 <code>Article</code> 的 ts 类型定义。</p>
+<pre><code>export interface Article {
+  article_id: string
+  article_info: ArticleInfo
+  category: Category
+  tags: Tag[]
+}
+
+export interface ArticleInfo {
+  article_id: string
+  cover_image: string
+  title: string
+  brief_content: string
+  content: string
+  ctime: string
+  mtime: string
+  rtime: string
+  view_count: number
+  collect_count: number
+  digg_count: number
+  comment_count: number
+}
+
+export interface Category {
+  category_id: string
+  category_name: string
+}
+
+export interface Tag {
+  id: number
+  tag_id: string
+  tag_name: string
+}
+</code></pre>
+<h2>文章列表页实现</h2>
+<p>下面我们用 Tailwind css 来实现下 <code>ArticleList</code> 组件</p>
+<pre><code>import React from 'react'
+import Link from 'next/link'
+import Pagination from './Pagination'
+
+export default function ArticleList({ articles, totalPages, currentPage }: Props) {
+  return (
+    &#x3C;div className="mx-auto max-w-5xl">
+      &#x3C;ul>
+        {articles.map((article) => (
+          &#x3C;li key={article.article_id} className="py-4">
+            &#x3C;article className="xl:grid xl:grid-cols-4 xl:items-start xl:gap-2">
+              &#x3C;dl>
+                &#x3C;dt>
+                  &#x3C;img
+                    className="w-52"
+                    src={article.article_info.cover_image}
+                    alt={article.article_info.title}
+                  />
+                &#x3C;/dt>
+                &#x3C;dd className="text-base font-medium leading-6 text-gray-500 dark:text-gray-400">
+                  &#x3C;span className="sr-only">Published on&#x3C;/span>
+                  &#x3C;time>
+                    {new Date(+article.article_info.ctime * 1000).toLocaleDateString('zh-CN', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  &#x3C;/time>
+                &#x3C;/dd>
+              &#x3C;/dl>
+              &#x3C;div className="space-y-3 xl:col-span-3">
+                &#x3C;div>
+                  &#x3C;h3 className="text-2xl font-bold leading-8 tracking-tight">
+                    &#x3C;Link
+                      className="text-gray-900 dark:text-gray-100"
+                      href={`/blog/${article.article_id}`}
+                    >
+                      {article.article_info.title}
+                    &#x3C;/Link>
+                  &#x3C;/h3>
+                  &#x3C;div className="mt-3 flex flex-wrap">
+                    {article.tags.map((tag) => (
+                      &#x3C;Link
+                        key={tag.tag_id}
+                        className="mr-3 text-sm font-medium uppercase text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+                        href={`/tags/${tag.tag_name}`}
+                      >
+                        {tag.tag_name}
+                      &#x3C;/Link>
+                    ))}
+                  &#x3C;/div>
+                &#x3C;/div>
+                &#x3C;div className="prose max-w-none text-gray-500 dark:text-gray-400">
+                  {article.article_info.brief_content}
+                &#x3C;/div>
+              &#x3C;/div>
+            &#x3C;/article>
+          &#x3C;/li>
+        ))}
+      &#x3C;/ul>
+      &#x3C;Pagination totalPages={totalPages} currentPage={currentPage} />
+    &#x3C;/div>
+  )
+}
+</code></pre>
+<ul>
+<li>页面之间的跳转，我们应该使用 <code>next/link</code> ，而不是 <code>&#x3C;a></code>标签，跟 react-router 中的<code>Link</code>类似，用户点击链接，并不会全局刷新，而是动态替换网页中的内容。</li>
+<li>Tailwindcss 默认是移动优先，若要适配其他屏幕，可以在样式前面加 md、lg、xl、2xl 等前缀， 上面代码中的 <code>xl:</code>代表屏幕宽度大于 1280px 应用的样式。</li>
+</ul>
+<h3>翻页组件</h3>
+<p><code>getArticles</code> 方法中返回了 <code>count</code> 文章总数，我们可以根据它和当前的 <code>currentPage</code> 封装成一个分页组件，代码如下：</p>
+<pre><code>import Link from 'next/link'
+
+interface Props {
+  totalPages: number
+  currentPage: number
+}
+
+export default function Pagination({ totalPages, currentPage }: Props) {
+  const prevPage = currentPage - 1 > 0
+  const nextPage = currentPage + 1 &#x3C;= totalPages
+
+  return (
+    &#x3C;div className="space-y-2 pt-6 pb-8 md:space-y-5">
+      &#x3C;nav className="flex justify-between">
+        {!prevPage &#x26;&#x26; (
+          &#x3C;button className="cursor-auto disabled:opacity-50" disabled={!prevPage}>
+            上一页
+          &#x3C;/button>
+        )}
+        {prevPage &#x26;&#x26; (
+          &#x3C;Link href={currentPage - 1 === 1 ? `/blog/` : `/blog/page/${currentPage - 1}`}>
+            &#x3C;button>上一页&#x3C;/button>
+          &#x3C;/Link>
+        )}
+        &#x3C;span>
+          {currentPage} of {totalPages}
+        &#x3C;/span>
+        {!nextPage &#x26;&#x26; (
+          &#x3C;button className="cursor-auto disabled:opacity-50" disabled={!nextPage}>
+            下一页
+          &#x3C;/button>
+        )}
+        {nextPage &#x26;&#x26; (
+          &#x3C;Link href={`/blog/page/${currentPage + 1}`}>
+            &#x3C;button>下一页&#x3C;/button>
+          &#x3C;/Link>
+        )}
+      &#x3C;/nav>
+    &#x3C;/div>
+  )
+}
+</code></pre>
+<p>一起来看下效果吧</p>
+<p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/03c264c4fe0b408687463005c9e5fc02~tplv-k3u1fbpfcp-zoom-1.image" alt="文章列表页"></p>
+<h3>路由重写</h3>
+<p>这里有一个疑问，其实我们的路由是 <code>/blog</code> 和 <code>blog/page/1</code> 这 2 个页面应该使用同一个组件，而现在我们需要在 pages 下面定义 2 个页面，那么 Next.js 中有没有可以配置的地方，可以重写路由，使用同一个组件呢？</p>
+<p>答案是当然可以的，在 <code>next.config.js</code>, 配置 <code>rewrites</code> 字段。</p>
+<pre><code>/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  swcMinify: true,
+  async rewrites() {
+    return [
+      {
+        source: '/blog/:id/edit',
+        destination: `/blog/create`,
+      },
+      {
+        source: '/blog/page/:page',
+        destination: `/blog`,
+      },
+    ]
+  },
+}
+
+module.exports = nextConfig
+</code></pre>
+<p>比如上面的配置中， 博客编辑页面 <code>/blog/:id/edit</code>，使用 <code>/blog/create</code>页面来实现，<code>rewrites</code> 字段也就是实现了 webpack devserver 的 <code>proxy</code> 功能，比如：后端有些接口使用 Java 实现，也可以使用 <code>rewrites</code> 实现代理联调。</p>
+<h2>文章详情</h2>
+<p>实现了文章列表页面，我们应该可以很快写出文章详情页面的页面代码，大致如下：</p>
+<pre><code>import { GetServerSidePropsContext } from 'next'
+import ErrorPage from 'next/error'
+import { getArticleDetail } from '../../lib/db'
+import { InferGetServerSidePropsType } from 'next'
+import { Article } from '../../types/article'
+
+export default function Page({
+  data,
+  statusCode,
+}: InferGetServerSidePropsType&#x3C;typeof getServerSideProps>) {
+  if (statusCode) {
+    return &#x3C;ErrorPage statusCode={statusCode} />
+  }
+  console.log(data)
+  //Render data...
+
+  return &#x3C;div className="prose">&#x3C;/div>
+}
+
+// 每次刷新页面都后执行这个函数
+export async function getServerSideProps(context: GetServerSidePropsContext) {
+  const slug = context.query?.slug as string[]
+  // 通过 API 请求数据
+  const res = await getArticleDetail(slug[0])
+  if (res.err_msg === 'success') {
+    // 将数据传递到页面上
+    return { props: { data: res.data as Article } }
+  }
+
+  // 将数据传递到页面上
+  return { props: { statusCode: 404 } }
+}
+</code></pre>
+<p>实现方式跟列表页相同</p>
+<ul>
+<li>在 <code>getServerSideProps</code> 中通过接口获取文章详情；</li>
+<li>接口获取失败的时候返回状态码 404，并且使用<code>next/error</code> 显示成统一的错误页面；</li>
+</ul>
+<p>接下来还有 3 个功能要实现：</p>
+<ol>
+<li>
+<p>markdown 格式转为 html</p>
+</li>
+<li>
+<p>文章详情页面的样式</p>
+</li>
+<li>
+<p>代码高亮</p>
+</li>
+</ol>
+<h3>markdown 转 html</h3>
+<p>请求接口后，得到的 markdown 内容结构如下</p>
+<pre><code>---
+highlight: monokai-sublime
+---
+
+## 正文内容
+</code></pre>
+<p>所以在解析 markdown 内容之前，还得解析 markdown 的前缀， 在命令行中安装以下 2 个包来实现这个功能。</p>
+<pre><code>yarn add markdown-it gray-matter
+yarn add @types/markdown-it --dev
+</code></pre>
+<p>那么我便可以写出编译 markdown 内容的代码了：</p>
+<pre><code>import MarkdownIt from 'markdown-it'
+import matter from 'gray-matter'
+
+const md = new MarkdownIt()
+
+export default function Page({
+  data,
+  statusCode,
+}: InferGetServerSidePropsType&#x3C;typeof getServerSideProps>) {
+  if (statusCode || !data) {
+    return &#x3C;Error statusCode={statusCode} />
+  }
+
+  const result = matter(data?.article_info.mark_content || '')
+
+  return (
+    &#x3C;div className="mx-auto">
+      &#x3C;header className="pt-6">
+        &#x3C;h1>{data?.article_info.title}&#x3C;/h1>
+        &#x3C;dl>
+          &#x3C;dt className="sr-only">Published on&#x3C;/dt>
+          &#x3C;dd className="text-base font-medium leading-6 text-gray-500">
+            &#x3C;time>
+              {new Date(+data.article_info.ctime * 1000).toLocaleDateString('zh-CN', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+            &#x3C;/time>
+          &#x3C;/dd>
+        &#x3C;/dl>
+        {data.article_info.cover_image &#x26;&#x26; (
+          &#x3C;img
+            className="max-w-full"
+            src={data.article_info.cover_image}
+            alt={data.article_info.title}
+          />
+        )}
+      &#x3C;/header>
+      &#x3C;div
+        dangerouslySetInnerHTML={{
+          __html: md.render(result.content),
+        }}
+      >&#x3C;/div>
+    &#x3C;/div>
+  )
+}
+</code></pre>
+<h3>文章详情页面的样式</h3>
+<p>关于文章详情页的样式，我第一个想到的是<a href="https://github.com/sindresorhus/github-markdown-css" title="github-markdown-css">github-markdown-css</a>, 但今天要推荐的还是 Tailwindcss，<code>@tailwindcss/typography</code> 是官方提供的插件，可以帮助我们排版美化文章类页面的样式。</p>
+<p>首先让我们来安装这个插件</p>
+<pre><code>yarn add  @tailwindcss/typography
+</code></pre>
+<p>然后在 <code>tailwind.config.js</code> 配置文件中加入这个插件:</p>
+<pre><code>module.exports = {
+  theme: {
+    // ...
+  },
+  plugins: [
+    require('@tailwindcss/typography'),
+    // ...
+  ],
+}
+</code></pre>
+<p>最后我们在文章最外层就可以加入 <code>prose</code> 这个样式了，<code>prose-indigo</code> 将主色调配置成湛蓝色，当然你可以改为其他 Tailwind css 中提供的默认颜色变量。</p>
+<pre><code>&#x3C;article class="prose prose-indigo">{{ markdown }}&#x3C;/article>
+</code></pre>
+<h3>代码高亮</h3>
+<p>最后一步，代码高亮，我选择使用更加轻量的 prismjs，在 react 使用也很简单，详情可以参考之前写的这篇文章<a href="https://juejin.cn/post/7088920558598881293" title="使用 Prism.js 对代码进行语法高亮">《使用 Prism.js 对代码进行语法高亮》</a>。</p>
+<pre><code>import React, { useEffect } from "react";
+import Prism from "prismjs";
+import "prismjs/components/prism-jsx";
+import "prismjs/components/prism-tsx";
+import "prismjs/components/prism-typescript";
+import "prismjs/components/prism-bash";
+import "prismjs/components/prism-markdown";
+...
+useEffect(() => {
+    Prism.highlightAll();
+  }, [data]);
+...
+</code></pre>
+<p>完成啦，一起来看下看下实现效果</p>
+<p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/7d88f680a5cf4157824a16ba9b1b94d0~tplv-k3u1fbpfcp-zoom-1.image" alt="文章详情页面效果"></p>
+<h2>个性化首页</h2>
+<p>到此，我们实现了文章列表页面和文章详情页面，现在还缺一个首页，写到这里，正巧发现今年有个主题是“航天”，那么我们就来设计一个“航天主题“的博客。</p>
+<ul>
+<li>在爱给网等网站搜索主题相关的 png 免扣素材；</li>
+<li>使用 canvas 粒子制作星空背景；</li>
+</ul>
+<p>我们先来看下效果，再看实现代码。</p>
+<p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/4daf15d5d4dc4585864dab9bb9c5152d~tplv-k3u1fbpfcp-zoom-1.image" alt=""></p>
+<p>下面是星空代码的实现，主要是实现思路</p>
+<ol>
+<li>随机在屏幕屏幕上初始化 800 个粒子</li>
+<li>使用 <code>requestAnimationFrame</code> 在原坐标基础上增加一定速度的系数</li>
+<li>粒子超出画布重新初始化粒子坐标</li>
+<li>使用 <code>ResizeObserver</code> 监听容器大小，重新初始化画布</li>
+</ol>
+<pre><code>const COUNT = 800
+const SPEED = 0.1
+class Star {
+  x: number
+  y: number
+  z: number
+  xPrev: number
+  yPrev: number
+  constructor(x = 0, y = 0, z = 0) {
+    this.x = x
+    this.y = y
+    this.z = z
+    this.xPrev = x
+    this.yPrev = y
+  }
+  update(width: number, height: number, speed: number) {
+    this.xPrev = this.x
+    this.yPrev = this.y
+    this.z += speed * 0.0675
+    this.x += this.x * (speed * 0.0225) * this.z
+    this.y += this.y * (speed * 0.0225) * this.z
+    // 超出屏幕坐标，初始化为随机值
+    if (this.x > width / 2 || this.x &#x3C; -width / 2 || this.y > height / 2 || this.y &#x3C; -height / 2) {
+      this.x = Math.random() * width - width / 2
+      this.y = Math.random() * height - height / 2
+      this.xPrev = this.x
+      this.yPrev = this.y
+      this.z = 0
+    }
+  }
+  draw(ctx: CanvasRenderingContext2D) {
+    ctx.lineWidth = this.z
+    ctx.beginPath()
+    ctx.moveTo(this.x, this.y)
+    ctx.lineTo(this.xPrev, this.yPrev)
+    ctx.stroke()
+  }
+}
+const stars = Array.from({ length: COUNT }, () => new Star(0, 0, 0))
+let rafId = 0
+const canvas: HTMLCanvasElement = document.querySelector('#canvas')!
+const ctx = canvas.getContext('2d')!
+const container = ref.current!
+// 监听 container 容器的变化，设置canvas 画布的大小
+const resizeObserver = new ResizeObserver(setup)
+resizeObserver.observe(container)
+function setup() {
+  // 缩放屏幕后取消动画
+  rafId > 0 &#x26;&#x26; cancelAnimationFrame(rafId)
+  const { clientWidth: width, clientHeight: height } = container
+  // 根据 dpi 缩放画布，保证高清屏显示
+  const dpr = window.devicePixelRatio || 1
+  canvas.width = width * dpr
+  canvas.height = height * dpr
+  canvas.style.width = `${width}px`
+  canvas.style.height = `${height + 1}px`
+  ctx.scale(dpr, dpr)
+  // 初始化坐标为随机 正负 1/2 width
+  for (const star of stars) {
+    star.x = Math.random() * width - width / 2
+    star.y = Math.random() * height - height / 2
+    star.z = 0
+  }
+  // 中心点偏移到屏幕中心
+  ctx.translate(width / 2, height / 2)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
+  ctx.strokeStyle = 'white'
+  rafId = requestAnimationFrame(frame)
+}
+function frame() {
+  const { clientWidth: width, clientHeight: height } = container
+  for (const star of stars) {
+    star.update(width, height, SPEED)
+    star.draw(ctx)
+  }
+  ctx.fillRect(-width / 2, -height / 2, width, height)
+  rafId = requestAnimationFrame(frame)
+}
+</code></pre>
+<h2>最后</h2>
+<p>我将该项目开源在 GitHub 中，你只需要：</p>
+<ul>
+<li>Fork <a href="https://github.com/maqi1520/nextjs-juejin-blog" title="nextjs-juejin-blog">该仓库</a>后，新建 <code>.env</code> 文件，写入 <code>uid=2189882895384093</code>, uid 值为掘金主页 url 上的 Id</li>
+<li>修改 <code>src/config.js</code> 里的配置为你自己的配置，</li>
+<li>使用 GitHub 账户登录 <a href="https://vercel.com/">vercel</a> 导入这个项目， 即可部署成功</li>
+</ul>
+<p>当然这个项目还存在一些问题，比如：</p>
+<ul>
+<li>需要进行 SEO 优化等</li>
+<li>Vercel 部署 Region 选择香港，Serverless 函数访问掘金接口的速度还是有些慢。</li>
+</ul>
+<h2>后续</h2>
+<p>接下来我将继续分享 Next.js 相关的实战文章，欢迎各位关注我的《Next.js 全栈开发实战》 专栏。</p>
+<ul>
+<li>使用 Strapi CSM 系统进行 Next.js 应用全栈开发</li>
+<li>使用 Notion 数据库进行 Next.js 应用全栈开发</li>
+<li>使用 Prisma 和 PostgreSQL 进行 Next.js 应用全栈开发</li>
+<li>使用 NextAuth 实现 Next.js 应用的鉴权与认证</li>
+<li>使用 React query 给 Next.js 应用全局状态管理</li>
+<li>使用 i18next 实现 Next.js 应用国际化</li>
+<li>使用 Playwright 进行 Next.js 应用的端到端测试</li>
+<li>使用 Github actions 给 Next.js 应用创建 CI/CD</li>
+<li>使用 Docker 部署 Next.js 应用</li>
+<li>将 Next.js 应用部署到腾讯云 serverless</li>
+</ul>
+<p>你对哪块内容比较感兴趣呢？欢迎在评论区留言，感谢您的阅读。</p>
+</div><div class="items-center"><a href="articles">返回文档列表</a></div></div></div></main></main><footer><div class="mt-16 flex flex-col items-center"><div class="mb-2 flex space-x-2 text-sm text-gray-500 dark:text-gray-400"><div>© 2023</div><div> • </div><a href="/">HAN|博客</a></div></div></footer></div></div><div></div><script src="/_next/static/chunks/webpack-afd6b160f7b2e7a5.js" async=""></script><script src="/_next/static/chunks/2443530c-da705fa45a107f29.js" async=""></script><script src="/_next/static/chunks/139-a98e23425a4dfbf4.js" async=""></script><script src="/_next/static/chunks/main-app-06da1dca58d74c34.js" async=""></script></body></html><script>(self.__next_f=self.__next_f||[]).push([0])</script><script>self.__next_f.push([1,"1:HL[\"/_next/static/css/26351ac1a6eca06c.css\",{\"as\":\"style\"}]\n0:\"$L2\"\n"])</script><script>self.__next_f.push([1,"3:HL[\"/_next/static/css/7f6bd37aab40623f.css\",{\"as\":\"style\"}]\n"])</script><script>self.__next_f.push([1,"4:I{\"id\":\"7858\",\"chunks\":[\"272:static/chunks/webpack-afd6b160f7b2e7a5.js\",\"667:static/chunks/2443530c-da705fa45a107f29.js\",\"139:static/chunks/139-a98e23425a4dfbf4.js\"],\"name\":\"\",\"async\":false}\n6:I{\"id\":\"3055\",\"chunks\":[\"272:static/chunks/webpack-afd6b160f7b2e7a5.js\",\"667:static/chunks/2443530c-da705fa45a107f29.js\",\"139:static/chunks/139-a98e23425a4dfbf4.js\"],\"name\":\"\",\"async\":false}\n7:I{\"id\":\"414\",\"chunks\":[\"414:static/chunks/414-4c4d64a76277ff85.js\",\"345:static/chunks/app/articles/page/[slug]/page-b019257b"])</script><script>self.__next_f.push([1,"db7591a1.js\"],\"name\":\"\",\"async\":false}\n8:I{\"id\":\"9544\",\"chunks\":[\"272:static/chunks/webpack-afd6b160f7b2e7a5.js\",\"667:static/chunks/2443530c-da705fa45a107f29.js\",\"139:static/chunks/139-a98e23425a4dfbf4.js\"],\"name\":\"\",\"async\":false}\n9:I{\"id\":\"99\",\"chunks\":[\"272:static/chunks/webpack-afd6b160f7b2e7a5.js\",\"667:static/chunks/2443530c-da705fa45a107f29.js\",\"139:static/chunks/139-a98e23425a4dfbf4.js\"],\"name\":\"\",\"async\":false}\na:I{\"id\":\"1389\",\"chunks\":[\"120:static/chunks/120-384f50ccf38e1ade.js\",\"70:static/chunks/a"])</script><script>self.__next_f.push([1,"pp/articles/layout-8324812b78a65603.js\"],\"name\":\"\",\"async\":false}\n"])</script><script>self.__next_f.push([1,"2:[[[\"$\",\"link\",\"0\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/css/26351ac1a6eca06c.css\",\"precedence\":\"next\"}]],[\"$\",\"$L4\",null,{\"assetPrefix\":\"\",\"initialCanonicalUrl\":\"/articles/next.js\",\"initialTree\":[\"\",{\"children\":[\"articles\",{\"children\":[[\"slug\",\"next.js\",\"d\"],{\"children\":[\"__PAGE__?{\\\"slug\\\":\\\"next.js\\\"}\",{}]}]}]},\"$undefined\",\"$undefined\",true],\"initialHead\":[\"$L5\",null],\"globalErrorComponent\":\"$6\",\"notFound\":[\"$\",\"html\",null,{\"lang\":\"zh-CN\",\"className\":\"scroll-smooth dark\",\"children\":[[\"$\",\"meta\",null,{\"charSet\":\"utf-8\"}],[\"$\",\"body\",null,{\"children\":[[\"$\",\"div\",null,{\"className\":\"mx-auto max-w-3xl px-4 sm:px-6 xl:max-w-5xl xl:px-0\",\"children\":[\"$\",\"div\",null,{\"className\":\"h-screen flex flex-col justify-between\",\"children\":[[\"$\",\"header\",null,{\"className\":\"flex items-center justify-around py-10\",\"children\":[[\"$\",\"div\",null,{\"children\":[\"$\",\"$L7\",null,{\"href\":\"/\",\"children\":[\"$\",\"div\",null,{\"className\":\"flex items-center justify-between\",\"children\":[\"$\",\"div\",null,{\"className\":\"hidden h-6 text-2xl font-semibold sm:block\",\"children\":[\"$\",\"a\",null,{\"children\":\"HAN个人博客\"}]}]}]}]}],[\"$\",\"div\",null,{\"className\":\"flex items-center text-base leading-5\",\"children\":[\"$\",\"div\",null,{\"className\":\"hidden sm:block\",\"children\":[[\"$\",\"$L7\",\"/\",{\"href\":\"/\",\"className\":\"p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4\",\"children\":\"主页\"}],[\"$\",\"$L7\",\"/articles\",{\"href\":\"/articles\",\"className\":\"p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4\",\"children\":\"文章\"}],[\"$\",\"$L7\",\"/about\",{\"href\":\"/about\",\"className\":\"p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4\",\"children\":\"关于\"}]]}]}],[\"$\",\"div\",null,{}]]}],[\"$\",\"main\",null,{\"className\":\"mb-auto\",\"children\":[[],[\"$\",\"div\",null,{\"className\":\"flex flex-col items-start justify-start md:mt-24 md:flex-row md:items-center md:justify-center md:space-x-6\",\"children\":[[\"$\",\"div\",null,{\"className\":\"space-x-2 pt-6 pb-8 md:space-y-5\",\"children\":[\"$\",\"h1\",null,{\"className\":\"text-6xl font-extrabold leading-9 tracking-tight text-gray-900 dark:text-gray-100 md:border-r-2 md:px-6 md:text-8xl md:leading-14\",\"children\":\"404\"}]}],[\"$\",\"div\",null,{\"className\":\"max-w-md\",\"children\":[[\"$\",\"p\",null,{\"className\":\"mb-4 text-xl font-bold leading-normal md:text-2xl\",\"children\":\"抱歉，这个页面暂时没找到\"}],[\"$\",\"p\",null,{\"className\":\"mb-8\",\"children\":\"别急，您可以可以返回首页找找！\"}],[\"$\",\"$L7\",null,{\"href\":\"/\",\"children\":[\"$\",\"button\",null,{\"className\":\"focus:shadow-outline-blue inline rounded-lg border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium leading-5 text-white shadow transition-colors duration-150 hover:bg-blue-700 focus:outline-none dark:hover:bg-blue-500\",\"children\":\"返回主页\"}]}]]}]]}]]}],[\"$\",\"footer\",null,{\"children\":[\"$\",\"div\",null,{\"className\":\"mt-16 flex flex-col items-center\",\"children\":[\"$\",\"div\",null,{\"className\":\"mb-2 flex space-x-2 text-sm text-gray-500 dark:text-gray-400\",\"children\":[[\"$\",\"div\",null,{\"children\":\"© 2023\"}],[\"$\",\"div\",null,{\"children\":\" • \"}],[\"$\",\"$L7\",null,{\"href\":\"/\",\"children\":\"HAN|博客\"}]]}]}]}]]}]}],[\"$\",\"div\",null,{}]]}]]}],\"asNotFound\":false,\"children\":[[\"$\",\"html\",null,{\"lang\":\"zh-CN\",\"className\":\"scroll-smooth dark\",\"children\":[[\"$\",\"meta\",null,{\"charSet\":\"utf-8\"}],[\"$\",\"body\",null,{\"children\":[[\"$\",\"div\",null,{\"className\":\"mx-auto max-w-3xl px-4 sm:px-6 xl:max-w-5xl xl:px-0\",\"children\":[\"$\",\"div\",null,{\"className\":\"h-screen flex flex-col justify-between\",\"children\":[[\"$\",\"header\",null,{\"className\":\"flex items-center justify-around py-10\",\"children\":[[\"$\",\"div\",null,{\"children\":[\"$\",\"$L7\",null,{\"href\":\"/\",\"children\":[\"$\",\"div\",null,{\"className\":\"flex items-center justify-between\",\"children\":[\"$\",\"div\",null,{\"className\":\"hidden h-6 text-2xl font-semibold sm:block\",\"children\":[\"$\",\"a\",null,{\"children\":\"HAN个人博客\"}]}]}]}]}],[\"$\",\"div\",null,{\"className\":\"flex items-center text-base leading-5\",\"children\":[\"$\",\"div\",null,{\"className\":\"hidden sm:block\",\"children\":[[\"$\",\"$L7\",\"/\",{\"href\":\"/\",\"className\":\"p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4\",\"children\":\"主页\"}],[\"$\",\"$L7\",\"/articles\",{\"href\":\"/articles\",\"className\":\"p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4\",\"children\":\"文章\"}],[\"$\",\"$L7\",\"/about\",{\"href\":\"/about\",\"className\":\"p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4\",\"children\":\"关于\"}]]}]}],[\"$\",\"div\",null,{}]]}],[\"$\",\"main\",null,{\"className\":\"mb-auto\",\"children\":[\"$\",\"$L8\",null,{\"parallelRouterKey\":\"children\",\"segmentPath\":[\"children\"],\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"loading\":\"$undefined\",\"loadingStyles\":\"$undefined\",\"hasLoading\":false,\"template\":[\"$\",\"$L9\",null,{}],\"templateStyles\":\"$undefined\",\"notFound\":[\"$\",\"div\",null,{\"className\":\"flex flex-col items-start justify-start md:mt-24 md:flex-row md:items-center md:justify-center md:space-x-6\",\"children\":[[\"$\",\"div\",null,{\"className\":\"space-x-2 pt-6 pb-8 md:space-y-5\",\"children\":[\"$\",\"h1\",null,{\"className\":\"text-6xl font-extrabold leading-9 tracking-tight text-gray-900 dark:text-gray-100 md:border-r-2 md:px-6 md:text-8xl md:leading-14\",\"children\":\"404\"}]}],[\"$\",\"div\",null,{\"className\":\"max-w-md\",\"children\":[[\"$\",\"p\",null,{\"className\":\"mb-4 text-xl font-bold leading-normal md:text-2xl\",\"children\":\"抱歉，这个页面暂时没找到\"}],[\"$\",\"p\",null,{\"className\":\"mb-8\",\"children\":\"别急，您可以可以返回首页找找！\"}],[\"$\",\"$L7\",null,{\"href\":\"/\",\"children\":[\"$\",\"button\",null,{\"className\":\"focus:shadow-outline-blue inline rounded-lg border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium leading-5 text-white shadow transition-colors duration-150 hover:bg-blue-700 focus:outline-none dark:hover:bg-blue-500\",\"children\":\"返回主页\"}]}]]}]]}],\"notFoundStyles\":[],\"asNotFound\":false,\"childProp\":{\"current\":[[\"$\",\"$La\",null,{\"children\":[\"$\",\"$L8\",null,{\"parallelRouterKey\":\"children\",\"segmentPath\":[\"children\",\"articles\",\"children\"],\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"loading\":\"$undefined\",\"loadingStyles\":\"$undefined\",\"hasLoading\":false,\"template\":[\"$\",\"$L9\",null,{}],\"templateStyles\":\"$undefined\",\"notFound\":\"$undefined\",\"notFoundStyles\":\"$undefined\",\"asNotFound\":false,\"childProp\":{\"current\":[\"$\",\"$L8\",null,{\"parallelRouterKey\":\"children\",\"segmentPath\":[\"children\",\"articles\",\"children\",[\"slug\",\"next.js\",\"d\"],\"children\"],\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"loading\":\"$undefined\",\"loadingStyles\":\"$undefined\",\"hasLoading\":false,\"template\":[\"$\",\"$L9\",null,{}],\"templateStyles\":\"$undefined\",\"notFound\":\"$undefined\",\"notFoundStyles\":\"$undefined\",\"asNotFound\":false,\"childProp\":{\"current\":[\"$Lb\",null],\"segment\":\"__PAGE__?{\\\"slug\\\":\\\"next.js\\\"}\"},\"styles\":[]}],\"segment\":[\"slug\",\"next.js\",\"d\"]},\"styles\":[]}],\"params\":{}}],null],\"segment\":\"articles\"},\"styles\":[[\"$\",\"link\",\"0\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/css/7f6bd37aab40623f.css\",\"precedence\":\"next\"}]]}]}],[\"$\",\"footer\",null,{\"children\":[\"$\",\"div\",null,{\"className\":\"mt-16 flex flex-col items-center\",\"children\":[\"$\",\"div\",null,{\"className\":\"mb-2 flex space-x-2 text-sm text-gray-500 dark:text-gray-400\",\"children\":[[\"$\",\"div\",null,{\"children\":\"© 2023\"}],[\"$\",\"div\",null,{\"children\":\" • \"}],[\"$\",\"$L7\",null,{\"href\":\"/\",\"children\":\"HAN|博客\"}]]}]}]}]]}]}],[\"$\",\"div\",null,{}]]}]]}],null]}]]\n"])</script><script>self.__next_f.push([1,"b:[\"$\",\"div\",null,{\"className\":\"flex justify-center\",\"children\":[\"$\",\"div\",null,{\"className\":\"prose dark:prose-invert mt-10\",\"children\":[[\"$\",\"h1\",null,{\"children\":\"使用 Next.js 和掘金 API 打造个性博客\"}],[\"$\",\"div\",null,{\"className\":\"items-center\",\"children\":[\"$\",\"$L7\",null,{\"href\":\"articles\",\"children\":\"返回文档列表\"}]}],[\"$\",\"div\",null,{\"dangerouslySetInnerHTML\":{\"__html\":\"\u003cblockquote\u003e\\n\u003cp\u003e文章为稀土掘金技术社区首发签约文章，14 天内禁止转载，14 天后未获授权禁止转载，侵权必究！\u003c/p\u003e\\n\u003c/blockquote\u003e\\n\u003ch2\u003e阅读本文，你将收获:\u003c/h2\u003e\\n\u003cul\u003e\\n\u003cli\u003e\\n\u003cp\u003e通过 chrome 调试工具获得掘金 api\u003c/p\u003e\\n\u003c/li\u003e\\n\u003cli\u003e\\n\u003cp\u003e学会使用 Next.js 服务端渲染\u003c/p\u003e\\n\u003c/li\u003e\\n\u003cli\u003e\\n\u003cp\u003e学会使用 Tailwindcss 来代替原生 css\u003c/p\u003e\\n\u003c/li\u003e\\n\u003cli\u003e\\n\u003cp\u003e在几分钟内就可以部署一个自己的博客\u003c/p\u003e\\n\u003c/li\u003e\\n\u003c/ul\u003e\\n\u003ch2\u003e背景\u003c/h2\u003e\\n\u003cp\u003e在开始之前，我想先问下各位，是否有自建博客？很多人选择在社区写博客，比如：掘金，因为在社区写博客能够第一时间被人看到，能够第一时间把知识分享出去，也可以在第一时间得到他们反馈和评论。\\n但在社区写博客也有劣势，比如掘金社区只能写技术文章，并不能完全展现你自己的个性。比如，我是一名前端开发者，在社区看我的文章，只能体现我是一名前端，但同时我又是一名摄影爱好者，这点就没办法体现了，所以这就是自建博客的优势，有非常高的灵活度，可以自己设计想要的风格和模块。但自建博客也有非常大的劣势，第一点就是部署到服务器，有一定花费，其次就是新建博客几乎没流量，所以我们需要在各大社区论坛发表文章，给自己的博客引流。这样一来，就迎来另一个问题，我需要在两个地方发表，这不就是重复劳动吗？\u003c/p\u003e\\n\u003cp\u003e接下来，我就分享下我的方法，通过掘金 API 打造个性博客，只要在掘金发表文章，就会自动同步到自己的博客中。\u003c/p\u003e\\n\u003cp\u003e本文涉及的代码都在\u003ca href=\\\"https://github.com/maqi1520/nextjs-juejin-blog\\\" title=\\\"nextjs-juejin-blog\\\"\u003e这个 Github 仓库\u003c/a\u003e中。\u003c/p\u003e\\n\u003ch2\u003e获取掘金 API\u003c/h2\u003e\\n\u003cp\u003e打开掘金主页，使用 chrome devtools 很容易可以找到获取文章列表的接口。\u003c/p\u003e\\n\u003cp\u003e\u003cimg src=\\\"https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/eeff54e385ec4f06a0e2f47d20b644d6~tplv-k3u1fbpfcp-zoom-1.image\\\" alt=\\\"devtools 查看文章列表接口\\\"\u003e\u003c/p\u003e\\n\u003cp\u003e可以看到接口返回了文章列表数据 \u003ccode\u003edata\u003c/code\u003e，文章总数 \u003ccode\u003ecount\u003c/code\u003e，以及当前的分页游标 \u003ccode\u003ecursor\u003c/code\u003e\u003c/p\u003e\\n\u003cp\u003e我们使用 axios 在 nodejs 中请求数据，封装成一个 \u003ccode\u003egetArticles\u003c/code\u003e 方法\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003eexport async function getArticles(uid: string, cursor: number = 0) {\\n  const res = await axios.post('https://api.juejin.cn/content_api/v1/article/query_list', {\\n    cursor: cursor + '',\\n    sort_type: 2,\\n    user_id: uid + '',\\n  })\\n\\n  return res.data\\n}\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e\u003cimg src=\\\"https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/5a16e5d6260b4a84a1f095fd24563951~tplv-k3u1fbpfcp-zoom-1.image\\\" alt=\\\"devtools 查看文章详情接口\\\"\u003e\u003c/p\u003e\\n\u003cp\u003e通过查看文章详情页，我们可以复制出接口，使用 axios 修改下，封装成 \u003ccode\u003egetArticleDetail\u003c/code\u003e 方法\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003eexport async function getArticleDetail(article_id: string) {\\n  const res = await axios.post('https://api.juejin.cn/content_api/v1/article/detail', {\\n    article_id,\\n  })\\n\\n  return res.data\\n}\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e有了接口，我们就可以用它来搭建自己的博客了。\u003c/p\u003e\\n\u003ch2\u003e初始化项目\u003c/h2\u003e\\n\u003cp\u003e接下来，我们将从零开始创建一个 next 项目，并且选择 Typescript 模板\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003enpx create-next-app --ts nextjs-juejin-blog\\ncd nextjs-juejin-blog\\nyarn dev\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e创建项目后，脚手架会帮我们自动执行 \u003ccode\u003eyarn install\u003c/code\u003e。\u003c/p\u003e\\n\u003cp\u003e打开 http://localhost:3000/ 你将看到如下页面\u003c/p\u003e\\n\u003cp\u003e\u003cimg src=\\\"https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/e7c8c4d0f3664167be138dd3fab69314~tplv-k3u1fbpfcp-zoom-1.image\\\" alt=\\\"Next.js 默认页面\\\"\u003e\u003c/p\u003e\\n\u003ch2\u003e添加 Tailwind CSS\u003c/h2\u003e\\n\u003cp\u003eTailwind CSS 是一个 CSS 原子类样式框架，我们可以使用现成的样式， 比如\u003ccode\u003eflex\u003c/code\u003e、\u003ccode\u003etext-3xl\u003c/code\u003e、\u003ccode\u003emr-3\u003c/code\u003e 等等，并且这些 CSS 会在构建的时候，打包出最小的样式文件。没接触过的小伙伴，一开始可能会不习惯，但写完一个项目后，你会爱不释手，因为所有的 CSS 都在组件中，并且一目了然。如果你之前的项目中使用的是 CSS modules，当项目变得复杂后，若没维护好的话，到最后可能会面向 vscode 搜索编程。\u003c/p\u003e\\n\u003cp\u003e在开始之前，你首先需要的 VSCODE 中安装 \u003ca href=\\\"https://marketplace.visualstudio.com/items?itemName=bradlc.vscode-tailwindcss\\\" title=\\\"Tailwind CSS IntelliSense\\\"\u003eTailwind CSS IntelliSense\u003c/a\u003e 插件，这样在你写 class 的时候，就会有智能提示，鼠标移动到 class 上，也可以看到具体的 CSS 属性。\u003c/p\u003e\\n\u003cp\u003e\u003cimg src=\\\"https://p6-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/3b08a4f2d1594af3ab51a5c2648380e4~tplv-k3u1fbpfcp-watermark.image?\\\" alt=\\\"Tailwind CSS IntelliSense\\\"\u003e\u003c/p\u003e\\n\u003cp\u003e接下来，我们可以在命令行中运行下面命令\u003c/p\u003e\\n\u003col\u003e\\n\u003cli\u003e安装 npm 包\u003c/li\u003e\\n\u003c/ol\u003e\\n\u003cpre\u003e\u003ccode\u003eyarn add -D tailwindcss postcss autoprefixer\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003eTailwindcss 的编译依赖 postcss，autoprefixer 会自动根据 \u003ccode\u003eCan I Use\u003c/code\u003e 标准给 CSS 属性添加浏览器适配前缀。\u003c/p\u003e\\n\u003col start=\\\"2\\\"\u003e\\n\u003cli\u003e初始化 \u003ccode\u003etailwind.config.js\u003c/code\u003e 配置文件\u003c/li\u003e\\n\u003c/ol\u003e\\n\u003cpre\u003e\u003ccode\u003enpx tailwindcss init -p\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003col start=\\\"3\\\"\u003e\\n\u003cli\u003e修改 \u003ccode\u003etailwind.config.js\u003c/code\u003e 配置文件，修改下 \u003ccode\u003econtent\u003c/code\u003e 字段构建，修改后，只会打包 content 中匹配文件使用到的 class\u003c/li\u003e\\n\u003c/ol\u003e\\n\u003cpre\u003e\u003ccode\u003econst colors = require('tailwindcss/colors')\\n\\n/** @type {import('tailwindcss').Config} */\\nmodule.exports = {\\n  content: ['./src/**/*.tsx'],\\n  theme: {\\n    extend: {\\n      colors: {\\n        primary: colors.indigo,\\n        //@ts-ignore\\n        gray: colors.neutral, // TODO: Remove ts-ignore after tw types gets updated to v3\\n      },\\n    },\\n  },\\n  plugins: [],\\n}\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e扩展一个 \u003ccode\u003eprimary color\u003c/code\u003e，主色调统一使用这个，方便后续不同的人使用这个模板，可以方便地修改主色\u003c/p\u003e\\n\u003cp\u003e调整下目录，将主要的代码目录都移动到 \u003ccode\u003esrc\u003c/code\u003e 下\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003emkdir src\\nmkdir src/components\\nmv styles src\\nmv pages src\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e这点是个人爱好，你可以遵循原来的目录。\u003c/p\u003e\\n\u003col start=\\\"4\\\"\u003e\\n\u003cli\u003e修改 \u003ccode\u003e/src/styles/globals.css\u003c/code\u003e 中的 CSS\u003c/li\u003e\\n\u003c/ol\u003e\\n\u003cpre\u003e\u003ccode\u003e@tailwind base;\\n@tailwind components;\\n@tailwind utilities;\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e\u003ccode\u003e@tailwind\u003c/code\u003e 指令会在运行的时候生成默认样式。\u003c/p\u003e\\n\u003ch2\u003e约定式路由\u003c/h2\u003e\\n\u003cp\u003e在 \u003ccode\u003epages\u003c/code\u003e 或者 \u003ccode\u003esrc/pages\u003c/code\u003e 文件夹下建立文件或文件夹，Next.js 会帮我自动创建路由系统。\u003c/p\u003e\\n\u003cp\u003e比如我们创建如下目录结构：\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003esrc/pages\\n├── _app.tsx\\n├── api\\n│   └── hello.ts\\n├── blog\\n│   ├── [...slug].tsx\\n│   └── page\\n│       └── [page].tsx\\n├── blog.tsx\\n└── index.tsx\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e就会创建如下路由\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003e/api/hello\\n/blog/page/:page\\n/blog/:slug\\n/blog\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cul\u003e\\n\u003cli\u003e其中 \u003ccode\u003e[page]\u003c/code\u003e 是变量，可以匹配任意值，那么我们的路由就是： \u003ccode\u003e/blog/page/1\u003c/code\u003e;\u003c/li\u003e\\n\u003cli\u003e\u003ccode\u003e[...slug]\u003c/code\u003e 是多层变量，可以匹配\u003ccode\u003e/blog/a\u003c/code\u003e、\u003ccode\u003e/blog/a/b\u003c/code\u003e、\u003ccode\u003e/blog/a/b/c\u003c/code\u003e 等等。\u003c/li\u003e\\n\u003c/ul\u003e\\n\u003ch2\u003e服务端渲染\u003c/h2\u003e\\n\u003cp\u003e在 Next.js 中，在 Page 页面中可以导出一个 \u003ccode\u003egetServerSideProps\u003c/code\u003e 方法，用于服务端获取数据。\u003c/p\u003e\\n\u003cp\u003e下面我们来实现下博客列表页面，需要获取 \u003ccode\u003eurl\u003c/code\u003e 上的翻页参数\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003eimport React from 'react'\\nimport { GetServerSidePropsContext } from 'next'\\nimport { getArticles } from '../lib/db'\\nimport { InferGetServerSidePropsType } from 'next'\\n\\nexport default function Page({\\n  data,\\n  count,\\n  page,\\n}: InferGetServerSidePropsType\u0026#x3C;typeof getServerSideProps\u003e) {\\n  // Render data...\\n  console.log(data)\\n}\\n\\n// 每次刷新页面都后执行这个函数\\nexport async function getServerSideProps(context: GetServerSidePropsContext) {\\n  const page = (context.query?.page as string) || 1\\n  // 通过 API 请求数据\\n  const uid = process.env.uid!\\n  const { data, count } = await getArticles(uid, (+page - 1) * 10)\\n\\n  // 将数据传递到页面上\\n  return { props: { data, count, page: +page } }\\n}\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e新建一个\u003ccode\u003e.env\u003c/code\u003e 文件，将掘金的 ID 设置为 uid，我们就可以在 nodejs 中通过\u003ccode\u003eprocess.env\u003c/code\u003e获取这个值。\u003c/p\u003e\\n\u003cp\u003e此时的 data 就是文章列表数据，复制其中一条数据，使用\u003ca href=\\\"https://www.runjs.cool/json-to-typescript\\\" title=\\\"json-to-typescript\\\"\u003e工具\u003c/a\u003e将 json 转为 typescript 类型，删除一些我们不需要的字段，我们就可以得到 \u003ccode\u003eArticle\u003c/code\u003e 的 ts 类型定义。\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003eexport interface Article {\\n  article_id: string\\n  article_info: ArticleInfo\\n  category: Category\\n  tags: Tag[]\\n}\\n\\nexport interface ArticleInfo {\\n  article_id: string\\n  cover_image: string\\n  title: string\\n  brief_content: string\\n  content: string\\n  ctime: string\\n  mtime: string\\n  rtime: string\\n  view_count: number\\n  collect_count: number\\n  digg_count: number\\n  comment_count: number\\n}\\n\\nexport interface Category {\\n  category_id: string\\n  category_name: string\\n}\\n\\nexport interface Tag {\\n  id: number\\n  tag_id: string\\n  tag_name: string\\n}\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003ch2\u003e文章列表页实现\u003c/h2\u003e\\n\u003cp\u003e下面我们用 Tailwind css 来实现下 \u003ccode\u003eArticleList\u003c/code\u003e 组件\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003eimport React from 'react'\\nimport Link from 'next/link'\\nimport Pagination from './Pagination'\\n\\nexport default function ArticleList({ articles, totalPages, currentPage }: Props) {\\n  return (\\n    \u0026#x3C;div className=\\\"mx-auto max-w-5xl\\\"\u003e\\n      \u0026#x3C;ul\u003e\\n        {articles.map((article) =\u003e (\\n          \u0026#x3C;li key={article.article_id} className=\\\"py-4\\\"\u003e\\n            \u0026#x3C;article className=\\\"xl:grid xl:grid-cols-4 xl:items-start xl:gap-2\\\"\u003e\\n              \u0026#x3C;dl\u003e\\n                \u0026#x3C;dt\u003e\\n                  \u0026#x3C;img\\n                    className=\\\"w-52\\\"\\n                    src={article.article_info.cover_image}\\n                    alt={article.article_info.title}\\n                  /\u003e\\n                \u0026#x3C;/dt\u003e\\n                \u0026#x3C;dd className=\\\"text-base font-medium leading-6 text-gray-500 dark:text-gray-400\\\"\u003e\\n                  \u0026#x3C;span className=\\\"sr-only\\\"\u003ePublished on\u0026#x3C;/span\u003e\\n                  \u0026#x3C;time\u003e\\n                    {new Date(+article.article_info.ctime * 1000).toLocaleDateString('zh-CN', {\\n                      year: 'numeric',\\n                      month: 'long',\\n                      day: 'numeric',\\n                    })}\\n                  \u0026#x3C;/time\u003e\\n                \u0026#x3C;/dd\u003e\\n              \u0026#x3C;/dl\u003e\\n              \u0026#x3C;div className=\\\"space-y-3 xl:col-span-3\\\"\u003e\\n                \u0026#x3C;div\u003e\\n                  \u0026#x3C;h3 className=\\\"text-2xl font-bold leading-8 tracking-tight\\\"\u003e\\n                    \u0026#x3C;Link\\n                      className=\\\"text-gray-900 dark:text-gray-100\\\"\\n                      href={`/blog/${article.article_id}`}\\n                    \u003e\\n                      {article.article_info.title}\\n                    \u0026#x3C;/Link\u003e\\n                  \u0026#x3C;/h3\u003e\\n                  \u0026#x3C;div className=\\\"mt-3 flex flex-wrap\\\"\u003e\\n                    {article.tags.map((tag) =\u003e (\\n                      \u0026#x3C;Link\\n                        key={tag.tag_id}\\n                        className=\\\"mr-3 text-sm font-medium uppercase text-primary-500 hover:text-primary-600 dark:hover:text-primary-400\\\"\\n                        href={`/tags/${tag.tag_name}`}\\n                      \u003e\\n                        {tag.tag_name}\\n                      \u0026#x3C;/Link\u003e\\n                    ))}\\n                  \u0026#x3C;/div\u003e\\n                \u0026#x3C;/div\u003e\\n                \u0026#x3C;div className=\\\"prose max-w-none text-gray-500 dark:text-gray-400\\\"\u003e\\n                  {article.article_info.brief_content}\\n                \u0026#x3C;/div\u003e\\n              \u0026#x3C;/div\u003e\\n            \u0026#x3C;/article\u003e\\n          \u0026#x3C;/li\u003e\\n        ))}\\n      \u0026#x3C;/ul\u003e\\n      \u0026#x3C;Pagination totalPages={totalPages} currentPage={currentPage} /\u003e\\n    \u0026#x3C;/div\u003e\\n  )\\n}\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cul\u003e\\n\u003cli\u003e页面之间的跳转，我们应该使用 \u003ccode\u003enext/link\u003c/code\u003e ，而不是 \u003ccode\u003e\u0026#x3C;a\u003e\u003c/code\u003e标签，跟 react-router 中的\u003ccode\u003eLink\u003c/code\u003e类似，用户点击链接，并不会全局刷新，而是动态替换网页中的内容。\u003c/li\u003e\\n\u003cli\u003eTailwindcss 默认是移动优先，若要适配其他屏幕，可以在样式前面加 md、lg、xl、2xl 等前缀， 上面代码中的 \u003ccode\u003exl:\u003c/code\u003e代表屏幕宽度大于 1280px 应用的样式。\u003c/li\u003e\\n\u003c/ul\u003e\\n\u003ch3\u003e翻页组件\u003c/h3\u003e\\n\u003cp\u003e\u003ccode\u003egetArticles\u003c/code\u003e 方法中返回了 \u003ccode\u003ecount\u003c/code\u003e 文章总数，我们可以根据它和当前的 \u003ccode\u003ecurrentPage\u003c/code\u003e 封装成一个分页组件，代码如下：\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003eimport Link from 'next/link'\\n\\ninterface Props {\\n  totalPages: number\\n  currentPage: number\\n}\\n\\nexport default function Pagination({ totalPages, currentPage }: Props) {\\n  const prevPage = currentPage - 1 \u003e 0\\n  const nextPage = currentPage + 1 \u0026#x3C;= totalPages\\n\\n  return (\\n    \u0026#x3C;div className=\\\"space-y-2 pt-6 pb-8 md:space-y-5\\\"\u003e\\n      \u0026#x3C;nav className=\\\"flex justify-between\\\"\u003e\\n        {!prevPage \u0026#x26;\u0026#x26; (\\n          \u0026#x3C;button className=\\\"cursor-auto disabled:opacity-50\\\" disabled={!prevPage}\u003e\\n            上一页\\n          \u0026#x3C;/button\u003e\\n        )}\\n        {prevPage \u0026#x26;\u0026#x26; (\\n          \u0026#x3C;Link href={currentPage - 1 === 1 ? `/blog/` : `/blog/page/${currentPage - 1}`}\u003e\\n            \u0026#x3C;button\u003e上一页\u0026#x3C;/button\u003e\\n          \u0026#x3C;/Link\u003e\\n        )}\\n        \u0026#x3C;span\u003e\\n          {currentPage} of {totalPages}\\n        \u0026#x3C;/span\u003e\\n        {!nextPage \u0026#x26;\u0026#x26; (\\n          \u0026#x3C;button className=\\\"cursor-auto disabled:opacity-50\\\" disabled={!nextPage}\u003e\\n            下一页\\n          \u0026#x3C;/button\u003e\\n        )}\\n        {nextPage \u0026#x26;\u0026#x26; (\\n          \u0026#x3C;Link href={`/blog/page/${currentPage + 1}`}\u003e\\n            \u0026#x3C;button\u003e下一页\u0026#x3C;/button\u003e\\n          \u0026#x3C;/Link\u003e\\n        )}\\n      \u0026#x3C;/nav\u003e\\n    \u0026#x3C;/div\u003e\\n  )\\n}\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e一起来看下效果吧\u003c/p\u003e\\n\u003cp\u003e\u003cimg src=\\\"https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/03c264c4fe0b408687463005c9e5fc02~tplv-k3u1fbpfcp-zoom-1.image\\\" alt=\\\"文章列表页\\\"\u003e\u003c/p\u003e\\n\u003ch3\u003e路由重写\u003c/h3\u003e\\n\u003cp\u003e这里有一个疑问，其实我们的路由是 \u003ccode\u003e/blog\u003c/code\u003e 和 \u003ccode\u003eblog/page/1\u003c/code\u003e 这 2 个页面应该使用同一个组件，而现在我们需要在 pages 下面定义 2 个页面，那么 Next.js 中有没有可以配置的地方，可以重写路由，使用同一个组件呢？\u003c/p\u003e\\n\u003cp\u003e答案是当然可以的，在 \u003ccode\u003enext.config.js\u003c/code\u003e, 配置 \u003ccode\u003erewrites\u003c/code\u003e 字段。\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003e/** @type {import('next').NextConfig} */\\nconst nextConfig = {\\n  reactStrictMode: true,\\n  swcMinify: true,\\n  async rewrites() {\\n    return [\\n      {\\n        source: '/blog/:id/edit',\\n        destination: `/blog/create`,\\n      },\\n      {\\n        source: '/blog/page/:page',\\n        destination: `/blog`,\\n      },\\n    ]\\n  },\\n}\\n\\nmodule.exports = nextConfig\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e比如上面的配置中， 博客编辑页面 \u003ccode\u003e/blog/:id/edit\u003c/code\u003e，使用 \u003ccode\u003e/blog/create\u003c/code\u003e页面来实现，\u003ccode\u003erewrites\u003c/code\u003e 字段也就是实现了 webpack devserver 的 \u003ccode\u003eproxy\u003c/code\u003e 功能，比如：后端有些接口使用 Java 实现，也可以使用 \u003ccode\u003erewrites\u003c/code\u003e 实现代理联调。\u003c/p\u003e\\n\u003ch2\u003e文章详情\u003c/h2\u003e\\n\u003cp\u003e实现了文章列表页面，我们应该可以很快写出文章详情页面的页面代码，大致如下：\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003eimport { GetServerSidePropsContext } from 'next'\\nimport ErrorPage from 'next/error'\\nimport { getArticleDetail } from '../../lib/db'\\nimport { InferGetServerSidePropsType } from 'next'\\nimport { Article } from '../../types/article'\\n\\nexport default function Page({\\n  data,\\n  statusCode,\\n}: InferGetServerSidePropsType\u0026#x3C;typeof getServerSideProps\u003e) {\\n  if (statusCode) {\\n    return \u0026#x3C;ErrorPage statusCode={statusCode} /\u003e\\n  }\\n  console.log(data)\\n  //Render data...\\n\\n  return \u0026#x3C;div className=\\\"prose\\\"\u003e\u0026#x3C;/div\u003e\\n}\\n\\n// 每次刷新页面都后执行这个函数\\nexport async function getServerSideProps(context: GetServerSidePropsContext) {\\n  const slug = context.query?.slug as string[]\\n  // 通过 API 请求数据\\n  const res = await getArticleDetail(slug[0])\\n  if (res.err_msg === 'success') {\\n    // 将数据传递到页面上\\n    return { props: { data: res.data as Article } }\\n  }\\n\\n  // 将数据传递到页面上\\n  return { props: { statusCode: 404 } }\\n}\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e实现方式跟列表页相同\u003c/p\u003e\\n\u003cul\u003e\\n\u003cli\u003e在 \u003ccode\u003egetServerSideProps\u003c/code\u003e 中通过接口获取文章详情；\u003c/li\u003e\\n\u003cli\u003e接口获取失败的时候返回状态码 404，并且使用\u003ccode\u003enext/error\u003c/code\u003e 显示成统一的错误页面；\u003c/li\u003e\\n\u003c/ul\u003e\\n\u003cp\u003e接下来还有 3 个功能要实现：\u003c/p\u003e\\n\u003col\u003e\\n\u003cli\u003e\\n\u003cp\u003emarkdown 格式转为 html\u003c/p\u003e\\n\u003c/li\u003e\\n\u003cli\u003e\\n\u003cp\u003e文章详情页面的样式\u003c/p\u003e\\n\u003c/li\u003e\\n\u003cli\u003e\\n\u003cp\u003e代码高亮\u003c/p\u003e\\n\u003c/li\u003e\\n\u003c/ol\u003e\\n\u003ch3\u003emarkdown 转 html\u003c/h3\u003e\\n\u003cp\u003e请求接口后，得到的 markdown 内容结构如下\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003e---\\nhighlight: monokai-sublime\\n---\\n\\n## 正文内容\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e所以在解析 markdown 内容之前，还得解析 markdown 的前缀， 在命令行中安装以下 2 个包来实现这个功能。\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003eyarn add markdown-it gray-matter\\nyarn add @types/markdown-it --dev\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e那么我便可以写出编译 markdown 内容的代码了：\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003eimport MarkdownIt from 'markdown-it'\\nimport matter from 'gray-matter'\\n\\nconst md = new MarkdownIt()\\n\\nexport default function Page({\\n  data,\\n  statusCode,\\n}: InferGetServerSidePropsType\u0026#x3C;typeof getServerSideProps\u003e) {\\n  if (statusCode || !data) {\\n    return \u0026#x3C;Error statusCode={statusCode} /\u003e\\n  }\\n\\n  const result = matter(data?.article_info.mark_content || '')\\n\\n  return (\\n    \u0026#x3C;div className=\\\"mx-auto\\\"\u003e\\n      \u0026#x3C;header className=\\\"pt-6\\\"\u003e\\n        \u0026#x3C;h1\u003e{data?.article_info.title}\u0026#x3C;/h1\u003e\\n        \u0026#x3C;dl\u003e\\n          \u0026#x3C;dt className=\\\"sr-only\\\"\u003ePublished on\u0026#x3C;/dt\u003e\\n          \u0026#x3C;dd className=\\\"text-base font-medium leading-6 text-gray-500\\\"\u003e\\n            \u0026#x3C;time\u003e\\n              {new Date(+data.article_info.ctime * 1000).toLocaleDateString('zh-CN', {\\n                year: 'numeric',\\n                month: 'long',\\n                day: 'numeric',\\n              })}\\n            \u0026#x3C;/time\u003e\\n          \u0026#x3C;/dd\u003e\\n        \u0026#x3C;/dl\u003e\\n        {data.article_info.cover_image \u0026#x26;\u0026#x26; (\\n          \u0026#x3C;img\\n            className=\\\"max-w-full\\\"\\n            src={data.article_info.cover_image}\\n            alt={data.article_info.title}\\n          /\u003e\\n        )}\\n      \u0026#x3C;/header\u003e\\n      \u0026#x3C;div\\n        dangerouslySetInnerHTML={{\\n          __html: md.render(result.content),\\n        }}\\n      \u003e\u0026#x3C;/div\u003e\\n    \u0026#x3C;/div\u003e\\n  )\\n}\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003ch3\u003e文章详情页面的样式\u003c/h3\u003e\\n\u003cp\u003e关于文章详情页的样式，我第一个想到的是\u003ca href=\\\"https://github.com/sindresorhus/github-markdown-css\\\" title=\\\"github-markdown-css\\\"\u003egithub-markdown-css\u003c/a\u003e, 但今天要推荐的还是 Tailwindcss，\u003ccode\u003e@tailwindcss/typography\u003c/code\u003e 是官方提供的插件，可以帮助我们排版美化文章类页面的样式。\u003c/p\u003e\\n\u003cp\u003e首先让我们来安装这个插件\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003eyarn add  @tailwindcss/typography\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e然后在 \u003ccode\u003etailwind.config.js\u003c/code\u003e 配置文件中加入这个插件:\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003emodule.exports = {\\n  theme: {\\n    // ...\\n  },\\n  plugins: [\\n    require('@tailwindcss/typography'),\\n    // ...\\n  ],\\n}\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e最后我们在文章最外层就可以加入 \u003ccode\u003eprose\u003c/code\u003e 这个样式了，\u003ccode\u003eprose-indigo\u003c/code\u003e 将主色调配置成湛蓝色，当然你可以改为其他 Tailwind css 中提供的默认颜色变量。\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003e\u0026#x3C;article class=\\\"prose prose-indigo\\\"\u003e{{ markdown }}\u0026#x3C;/article\u003e\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003ch3\u003e代码高亮\u003c/h3\u003e\\n\u003cp\u003e最后一步，代码高亮，我选择使用更加轻量的 prismjs，在 react 使用也很简单，详情可以参考之前写的这篇文章\u003ca href=\\\"https://juejin.cn/post/7088920558598881293\\\" title=\\\"使用 Prism.js 对代码进行语法高亮\\\"\u003e《使用 Prism.js 对代码进行语法高亮》\u003c/a\u003e。\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003eimport React, { useEffect } from \\\"react\\\";\\nimport Prism from \\\"prismjs\\\";\\nimport \\\"prismjs/components/prism-jsx\\\";\\nimport \\\"prismjs/components/prism-tsx\\\";\\nimport \\\"prismjs/components/prism-typescript\\\";\\nimport \\\"prismjs/components/prism-bash\\\";\\nimport \\\"prismjs/components/prism-markdown\\\";\\n...\\nuseEffect(() =\u003e {\\n    Prism.highlightAll();\\n  }, [data]);\\n...\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e完成啦，一起来看下看下实现效果\u003c/p\u003e\\n\u003cp\u003e\u003cimg src=\\\"https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/7d88f680a5cf4157824a16ba9b1b94d0~tplv-k3u1fbpfcp-zoom-1.image\\\" alt=\\\"文章详情页面效果\\\"\u003e\u003c/p\u003e\\n\u003ch2\u003e个性化首页\u003c/h2\u003e\\n\u003cp\u003e到此，我们实现了文章列表页面和文章详情页面，现在还缺一个首页，写到这里，正巧发现今年有个主题是“航天”，那么我们就来设计一个“航天主题“的博客。\u003c/p\u003e\\n\u003cul\u003e\\n\u003cli\u003e在爱给网等网站搜索主题相关的 png 免扣素材；\u003c/li\u003e\\n\u003cli\u003e使用 canvas 粒子制作星空背景；\u003c/li\u003e\\n\u003c/ul\u003e\\n\u003cp\u003e我们先来看下效果，再看实现代码。\u003c/p\u003e\\n\u003cp\u003e\u003cimg src=\\\"https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/4daf15d5d4dc4585864dab9bb9c5152d~tplv-k3u1fbpfcp-zoom-1.image\\\" alt=\\\"\\\"\u003e\u003c/p\u003e\\n\u003cp\u003e下面是星空代码的实现，主要是实现思路\u003c/p\u003e\\n\u003col\u003e\\n\u003cli\u003e随机在屏幕屏幕上初始化 800 个粒子\u003c/li\u003e\\n\u003cli\u003e使用 \u003ccode\u003erequestAnimationFrame\u003c/code\u003e 在原坐标基础上增加一定速度的系数\u003c/li\u003e\\n\u003cli\u003e粒子超出画布重新初始化粒子坐标\u003c/li\u003e\\n\u003cli\u003e使用 \u003ccode\u003eResizeObserver\u003c/code\u003e 监听容器大小，重新初始化画布\u003c/li\u003e\\n\u003c/ol\u003e\\n\u003cpre\u003e\u003ccode\u003econst COUNT = 800\\nconst SPEED = 0.1\\nclass Star {\\n  x: number\\n  y: number\\n  z: number\\n  xPrev: number\\n  yPrev: number\\n  constructor(x = 0, y = 0, z = 0) {\\n    this.x = x\\n    this.y = y\\n    this.z = z\\n    this.xPrev = x\\n    this.yPrev = y\\n  }\\n  update(width: number, height: number, speed: number) {\\n    this.xPrev = this.x\\n    this.yPrev = this.y\\n    this.z += speed * 0.0675\\n    this.x += this.x * (speed * 0.0225) * this.z\\n    this.y += this.y * (speed * 0.0225) * this.z\\n    // 超出屏幕坐标，初始化为随机值\\n    if (this.x \u003e width / 2 || this.x \u0026#x3C; -width / 2 || this.y \u003e height / 2 || this.y \u0026#x3C; -height / 2) {\\n      this.x = Math.random() * width - width / 2\\n      this.y = Math.random() * height - height / 2\\n      this.xPrev = this.x\\n      this.yPrev = this.y\\n      this.z = 0\\n    }\\n  }\\n  draw(ctx: CanvasRenderingContext2D) {\\n    ctx.lineWidth = this.z\\n    ctx.beginPath()\\n    ctx.moveTo(this.x, this.y)\\n    ctx.lineTo(this.xPrev, this.yPrev)\\n    ctx.stroke()\\n  }\\n}\\nconst stars = Array.from({ length: COUNT }, () =\u003e new Star(0, 0, 0))\\nlet rafId = 0\\nconst canvas: HTMLCanvasElement = document.querySelector('#canvas')!\\nconst ctx = canvas.getContext('2d')!\\nconst container = ref.current!\\n// 监听 container 容器的变化，设置canvas 画布的大小\\nconst resizeObserver = new ResizeObserver(setup)\\nresizeObserver.observe(container)\\nfunction setup() {\\n  // 缩放屏幕后取消动画\\n  rafId \u003e 0 \u0026#x26;\u0026#x26; cancelAnimationFrame(rafId)\\n  const { clientWidth: width, clientHeight: height } = container\\n  // 根据 dpi 缩放画布，保证高清屏显示\\n  const dpr = window.devicePixelRatio || 1\\n  canvas.width = width * dpr\\n  canvas.height = height * dpr\\n  canvas.style.width = `${width}px`\\n  canvas.style.height = `${height + 1}px`\\n  ctx.scale(dpr, dpr)\\n  // 初始化坐标为随机 正负 1/2 width\\n  for (const star of stars) {\\n    star.x = Math.random() * width - width / 2\\n    star.y = Math.random() * height - height / 2\\n    star.z = 0\\n  }\\n  // 中心点偏移到屏幕中心\\n  ctx.translate(width / 2, height / 2)\\n  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'\\n  ctx.strokeStyle = 'white'\\n  rafId = requestAnimationFrame(frame)\\n}\\nfunction frame() {\\n  const { clientWidth: width, clientHeight: height } = container\\n  for (const star of stars) {\\n    star.update(width, height, SPEED)\\n    star.draw(ctx)\\n  }\\n  ctx.fillRect(-width / 2, -height / 2, width, height)\\n  rafId = requestAnimationFrame(frame)\\n}\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003ch2\u003e最后\u003c/h2\u003e\\n\u003cp\u003e我将该项目开源在 GitHub 中，你只需要：\u003c/p\u003e\\n\u003cul\u003e\\n\u003cli\u003eFork \u003ca href=\\\"https://github.com/maqi1520/nextjs-juejin-blog\\\" title=\\\"nextjs-juejin-blog\\\"\u003e该仓库\u003c/a\u003e后，新建 \u003ccode\u003e.env\u003c/code\u003e 文件，写入 \u003ccode\u003euid=2189882895384093\u003c/code\u003e, uid 值为掘金主页 url 上的 Id\u003c/li\u003e\\n\u003cli\u003e修改 \u003ccode\u003esrc/config.js\u003c/code\u003e 里的配置为你自己的配置，\u003c/li\u003e\\n\u003cli\u003e使用 GitHub 账户登录 \u003ca href=\\\"https://vercel.com/\\\"\u003evercel\u003c/a\u003e 导入这个项目， 即可部署成功\u003c/li\u003e\\n\u003c/ul\u003e\\n\u003cp\u003e当然这个项目还存在一些问题，比如：\u003c/p\u003e\\n\u003cul\u003e\\n\u003cli\u003e需要进行 SEO 优化等\u003c/li\u003e\\n\u003cli\u003eVercel 部署 Region 选择香港，Serverless 函数访问掘金接口的速度还是有些慢。\u003c/li\u003e\\n\u003c/ul\u003e\\n\u003ch2\u003e后续\u003c/h2\u003e\\n\u003cp\u003e接下来我将继续分享 Next.js 相关的实战文章，欢迎各位关注我的《Next.js 全栈开发实战》 专栏。\u003c/p\u003e\\n\u003cul\u003e\\n\u003cli\u003e使用 Strapi CSM 系统进行 Next.js 应用全栈开发\u003c/li\u003e\\n\u003cli\u003e使用 Notion 数据库进行 Next.js 应用全栈开发\u003c/li\u003e\\n\u003cli\u003e使用 Prisma 和 PostgreSQL 进行 Next.js 应用全栈开发\u003c/li\u003e\\n\u003cli\u003e使用 NextAuth 实现 Next.js 应用的鉴权与认证\u003c/li\u003e\\n\u003cli\u003e使用 React query 给 Next.js 应用全局状态管理\u003c/li\u003e\\n\u003cli\u003e使用 i18next 实现 Next.js 应用国际化\u003c/li\u003e\\n\u003cli\u003e使用 Playwright 进行 Next.js 应用的端到端测试\u003c/li\u003e\\n\u003cli\u003e使用 Github actions 给 Next.js 应用创建 CI/CD\u003c/li\u003e\\n\u003cli\u003e使用 Docker 部署 Next.js 应用\u003c/li\u003e\\n\u003cli\u003e将 Next.js 应用部署到腾讯云 serverless\u003c/li\u003e\\n\u003c/ul\u003e\\n\u003cp\u003e你对哪块内容比较感兴趣呢？欢迎在评论区留言，感谢您的阅读。\u003c/p\u003e\\n\"}}],[\"$\",\"div\",null,{\"className\":\"items-center\",\"children\":[\"$\",\"$L7\",null,{\"href\":\"articles\",\"children\":\"返回文档列表\"}]}]]}]}]\n"])</script><script>self.__next_f.push([1,"5:[[[\"$\",\"meta\",null,{\"charSet\":\"utf-8\"}],[\"$\",\"title\",null,{\"children\":\"HAN Blog\"}],[\"$\",\"meta\",null,{\"name\":\"description\",\"content\":\"Created by HAN\"}],null,null,null,null,null,null,null,null,[\"$\",\"meta\",null,{\"name\":\"viewport\",\"content\":\"width=device-width, initial-scale=1\"}],null,null,null,null,null,null,null,null,null,null,[]],[null,null,null,null],null,null,[null,null,null,null,null],null,null,null,null,[null,[[\"$\",\"link\",null,{\"rel\":\"icon\",\"href\":\"\\\\favicon.ico\",\"type\":\"image/x-icon\",\"sizes\":\"any\"}]],[],null]]\n"])</script>

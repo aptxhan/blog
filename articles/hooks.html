@@ -1,0 +1,133 @@
+<!DOCTYPE html><html lang="zh-CN" class="scroll-smooth dark"><head><meta charSet="utf-8"/><meta charSet="utf-8"/><link rel="stylesheet" href="/_next/static/css/26351ac1a6eca06c.css" data-precedence="next"/><link rel="stylesheet" href="/_next/static/css/7f6bd37aab40623f.css" data-precedence="next"/><title>HAN Blog</title><meta name="description" content="Created by HAN"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="icon" href="\favicon.ico" type="image/x-icon" sizes="any"/><script src="/_next/static/chunks/polyfills-c67a75d1b6f99dc8.js" noModule=""></script></head><body><div class="mx-auto max-w-3xl px-4 sm:px-6 xl:max-w-5xl xl:px-0"><div class="h-screen flex flex-col justify-between"><header class="flex items-center justify-around py-10"><div><a href="/"><div class="flex items-center justify-between"><div class="hidden h-6 text-2xl font-semibold sm:block"><a>HAN个人博客</a></div></div></a></div><div class="flex items-center text-base leading-5"><div class="hidden sm:block"><a class="p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4" href="/">主页</a><a class="p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4" href="/articles">文章</a><a class="p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4" href="/about">关于</a></div></div><div></div></header><main class="mb-auto"><main><div class="flex justify-center"><div class="prose dark:prose-invert mt-10"><h1>如何避免 React hooks 闭包陷阱？</h1><div class="items-center"><a href="articles">返回文档列表</a></div><div><h2>什么是 React hooks 闭包陷阱？</h2>
+<p>在 react 中 提供了一些性能优化函数 <code>react.memo</code> 、<code>useMemo</code>、<code>useCallback</code>。</p>
+<pre><code>const cachedValue = useMemo((fn) => calculateValue, dependencies)
+</code></pre>
+<p><strong>useMemo</strong>：memoized 值，只有依赖项变更的时候才会重新计算</p>
+<pre><code>const cachedFn = useCallback(fn, dependencies)
+</code></pre>
+<p><strong>useCallback</strong>：memoized 函数，只有依赖项变更的时候才会重新更新</p>
+<pre><code>const MemoizedComponent = memo(SomeComponent, arePropsEqual?)
+</code></pre>
+<p><strong>memo</strong>：缓存组件，当 props 没变化的时候，不会执行 render。<code>arePropsEqual</code> 是一个可选函数，可以自定义对比新旧的 <code>props</code>, 返回 <code>true</code> 就会缓存，返回 <code>false</code>，就不会缓存。</p>
+<pre><code>const arePropsEqual=(oldProps: Props, newProps: Props) => boolean
+</code></pre>
+<p>有时候我们使用了这些函数来优化性能，这些函数与外围的 state 形成闭包，导致缓存函数中获取到的 state 不是最新的值，这就是闭包陷阱。</p>
+<h2>实例演示</h2>
+<p>比如下面代码，在项目中有一个计时器组件，还有一个 <code>Child</code> 组件, 点击 <code>Child</code> 组件需要返回 App 组件中的最新 <code>state</code> 值；</p>
+<pre><code>import React, { useCallback, useEffect, useLayoutEffect } from 'react'
+import 'antd/dist/antd.css'
+import { Button, ButtonProps } from 'antd'
+
+const Child = ({ onClick }: ButtonProps) => {
+  console.log('render')
+  return (
+    &#x3C;Button onClick={onClick} type="primary">
+      Button
+    &#x3C;/Button>
+  )
+}
+
+const App: React.FC = () => {
+  const [count, setCount] = React.useState(0)
+
+  useEffect(() => {
+    const time = setInterval(() => {
+      setCount((count) => count + 1)
+    }, 1000)
+    return () => {
+      clearInterval(time)
+    }
+  }, [])
+
+  const handleClick = () => {
+    console.log(count)
+  }
+
+  return (
+    &#x3C;>
+      &#x3C;h2>{count}&#x3C;/h2>
+      &#x3C;Child onClick={handleClick} />
+    &#x3C;/>
+  )
+}
+
+export default App
+</code></pre>
+<p>这样没什么问题，但是每次渲染的时候 <code>Child</code> 组件都会执行 render</p>
+<p><img src="https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/0ffc82d64fd84254b2a988cb0f340bdd~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"></p>
+<p>为了防止 App 组件在更新的时候，不重复渲染（render）子组件，我们使用 <code>React.memo</code> 包裹下 <code>Child</code> 组件， <code>handleClick</code> 也需要使用 <code>useCallback</code> 包裹，这样 <code>Child</code> 组件只会 render 一次。</p>
+<pre><code>const Child = React.memo(({ onClick }: ButtonProps) => {
+  console.log('render')
+  return (
+    &#x3C;Button onClick={onClick} type="primary">
+      Button
+    &#x3C;/Button>
+  )
+})
+</code></pre>
+<pre><code>const handleClick = useCallback(() => {
+    console.log(count);
+  }, []);
+</code></pre>
+<p>这样一来 <code>useCallback</code> 和 state 就形成了一个闭包，每次打印的 state 就是初始化的 state。</p>
+<p><img src="https://p1-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/d18a20ad358d44a29ef944ca483489da~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"></p>
+<p>为了获得最新的 state 值，必须将 count 参数写进 useCallback 的第二个参数。</p>
+<pre><code>const handleClick = useCallback(() => {
+  console.log(count)
+}, [count])
+</code></pre>
+<p>但这样，又会导致 <code>Child</code> 组件更新。那么有什么好的解决办法呢？既能防止子组件的更新，又可以获取到最新的 <code>state</code> 值呢？</p>
+<p><strong>方法：</strong></p>
+<p>我们可以使用 <code>useRef</code> 来存一个函数，每次更新的时候设置 <code>ref.current</code> 的值，通过函数来获取最新的 <code>state</code> 值。</p>
+<pre><code>const App: React.FC = () => {
+  const [count, setCount] = React.useState(0);
+  const ref = React.useRef&#x3C;VoidFunction>();
+
+  useEffect(() => {
+    const time = setInterval(() => {
+      setCount((count) => count + 1);
+    }, 1000);
+    return () => {
+      clearInterval(time);
+    };
+  }, []);
+
+  const fn = () => {
+    console.log(count);
+  };
+
+  ref.current = fn;
+
+  const handleClick = useCallback(() => {
+    ref.current();
+  }, []);
+
+  return (
+    &#x3C;>
+      &#x3C;h2>{count}&#x3C;/h2>
+      &#x3C;Child onClick={handleClick} />
+    &#x3C;/>
+  );
+};
+
+</code></pre>
+<p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/36531d7c4f1f4c6d987991568df7a2dc~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"></p>
+<p><a href="https://codesandbox.io/s/an-niu-lei-xing-antd-4-24-2-forked-wv1w0q?file=/demo.tsx">codesandbox 演示地址</a></p>
+<h2>小结</h2>
+<p>解决闭包陷阱的方法</p>
+<ol>
+<li>
+<p>当页面更新不频繁的时候，不使用 <code>useMemo</code>、<code>useCallback</code> 缓存函数来优化页面；</p>
+</li>
+<li>
+<p>将更新依赖的参数写进 <code>useCallback</code> 的第二个参数</p>
+</li>
+<li>
+<p>使用 <code>useRef</code> 来存在一个函数，用一个函数实时获取最新的 <code>state</code> 值</p>
+</li>
+</ol>
+<p>以上就是本文全部内容，如果对你有帮助，可以随手点个赞，这对我真的很重要，希望这篇文章对大家有所帮助，也可以参考我往期的文章或者在评论区交流你的想法和心得，欢迎一起探索前端。</p>
+<blockquote>
+<p>本文正在参加<a href="https://juejin.cn/post/7162096952883019783" title="https://juejin.cn/post/7162096952883019783">「金石计划 . 瓜分 6 万现金大奖」</a></p>
+</blockquote>
+</div><div class="items-center"><a href="articles">返回文档列表</a></div></div></div></main></main><footer><div class="mt-16 flex flex-col items-center"><div class="mb-2 flex space-x-2 text-sm text-gray-500 dark:text-gray-400"><div>© 2023</div><div> • </div><a href="/">HAN|博客</a></div></div></footer></div></div><div></div><script src="/_next/static/chunks/webpack-afd6b160f7b2e7a5.js" async=""></script><script src="/_next/static/chunks/2443530c-da705fa45a107f29.js" async=""></script><script src="/_next/static/chunks/139-a98e23425a4dfbf4.js" async=""></script><script src="/_next/static/chunks/main-app-06da1dca58d74c34.js" async=""></script></body></html><script>(self.__next_f=self.__next_f||[]).push([0])</script><script>self.__next_f.push([1,"1:HL[\"/_next/static/css/26351ac1a6eca06c.css\",{\"as\":\"style\"}]\n0:\"$L2\"\n"])</script><script>self.__next_f.push([1,"3:HL[\"/_next/static/css/7f6bd37aab40623f.css\",{\"as\":\"style\"}]\n"])</script><script>self.__next_f.push([1,"4:I{\"id\":\"7858\",\"chunks\":[\"272:static/chunks/webpack-afd6b160f7b2e7a5.js\",\"667:static/chunks/2443530c-da705fa45a107f29.js\",\"139:static/chunks/139-a98e23425a4dfbf4.js\"],\"name\":\"\",\"async\":false}\n6:I{\"id\":\"3055\",\"chunks\":[\"272:static/chunks/webpack-afd6b160f7b2e7a5.js\",\"667:static/chunks/2443530c-da705fa45a107f29.js\",\"139:static/chunks/139-a98e23425a4dfbf4.js\"],\"name\":\"\",\"async\":false}\n7:I{\"id\":\"414\",\"chunks\":[\"414:static/chunks/414-4c4d64a76277ff85.js\",\"345:static/chunks/app/articles/page/[slug]/page-b019257b"])</script><script>self.__next_f.push([1,"db7591a1.js\"],\"name\":\"\",\"async\":false}\n8:I{\"id\":\"9544\",\"chunks\":[\"272:static/chunks/webpack-afd6b160f7b2e7a5.js\",\"667:static/chunks/2443530c-da705fa45a107f29.js\",\"139:static/chunks/139-a98e23425a4dfbf4.js\"],\"name\":\"\",\"async\":false}\n9:I{\"id\":\"99\",\"chunks\":[\"272:static/chunks/webpack-afd6b160f7b2e7a5.js\",\"667:static/chunks/2443530c-da705fa45a107f29.js\",\"139:static/chunks/139-a98e23425a4dfbf4.js\"],\"name\":\"\",\"async\":false}\na:I{\"id\":\"1389\",\"chunks\":[\"120:static/chunks/120-384f50ccf38e1ade.js\",\"70:static/chunks/a"])</script><script>self.__next_f.push([1,"pp/articles/layout-8324812b78a65603.js\"],\"name\":\"\",\"async\":false}\n"])</script><script>self.__next_f.push([1,"2:[[[\"$\",\"link\",\"0\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/css/26351ac1a6eca06c.css\",\"precedence\":\"next\"}]],[\"$\",\"$L4\",null,{\"assetPrefix\":\"\",\"initialCanonicalUrl\":\"/articles/hooks\",\"initialTree\":[\"\",{\"children\":[\"articles\",{\"children\":[[\"slug\",\"hooks\",\"d\"],{\"children\":[\"__PAGE__?{\\\"slug\\\":\\\"hooks\\\"}\",{}]}]}]},\"$undefined\",\"$undefined\",true],\"initialHead\":[\"$L5\",null],\"globalErrorComponent\":\"$6\",\"notFound\":[\"$\",\"html\",null,{\"lang\":\"zh-CN\",\"className\":\"scroll-smooth dark\",\"children\":[[\"$\",\"meta\",null,{\"charSet\":\"utf-8\"}],[\"$\",\"body\",null,{\"children\":[[\"$\",\"div\",null,{\"className\":\"mx-auto max-w-3xl px-4 sm:px-6 xl:max-w-5xl xl:px-0\",\"children\":[\"$\",\"div\",null,{\"className\":\"h-screen flex flex-col justify-between\",\"children\":[[\"$\",\"header\",null,{\"className\":\"flex items-center justify-around py-10\",\"children\":[[\"$\",\"div\",null,{\"children\":[\"$\",\"$L7\",null,{\"href\":\"/\",\"children\":[\"$\",\"div\",null,{\"className\":\"flex items-center justify-between\",\"children\":[\"$\",\"div\",null,{\"className\":\"hidden h-6 text-2xl font-semibold sm:block\",\"children\":[\"$\",\"a\",null,{\"children\":\"HAN个人博客\"}]}]}]}]}],[\"$\",\"div\",null,{\"className\":\"flex items-center text-base leading-5\",\"children\":[\"$\",\"div\",null,{\"className\":\"hidden sm:block\",\"children\":[[\"$\",\"$L7\",\"/\",{\"href\":\"/\",\"className\":\"p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4\",\"children\":\"主页\"}],[\"$\",\"$L7\",\"/articles\",{\"href\":\"/articles\",\"className\":\"p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4\",\"children\":\"文章\"}],[\"$\",\"$L7\",\"/about\",{\"href\":\"/about\",\"className\":\"p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4\",\"children\":\"关于\"}]]}]}],[\"$\",\"div\",null,{}]]}],[\"$\",\"main\",null,{\"className\":\"mb-auto\",\"children\":[[],[\"$\",\"div\",null,{\"className\":\"flex flex-col items-start justify-start md:mt-24 md:flex-row md:items-center md:justify-center md:space-x-6\",\"children\":[[\"$\",\"div\",null,{\"className\":\"space-x-2 pt-6 pb-8 md:space-y-5\",\"children\":[\"$\",\"h1\",null,{\"className\":\"text-6xl font-extrabold leading-9 tracking-tight text-gray-900 dark:text-gray-100 md:border-r-2 md:px-6 md:text-8xl md:leading-14\",\"children\":\"404\"}]}],[\"$\",\"div\",null,{\"className\":\"max-w-md\",\"children\":[[\"$\",\"p\",null,{\"className\":\"mb-4 text-xl font-bold leading-normal md:text-2xl\",\"children\":\"抱歉，这个页面暂时没找到\"}],[\"$\",\"p\",null,{\"className\":\"mb-8\",\"children\":\"别急，您可以可以返回首页找找！\"}],[\"$\",\"$L7\",null,{\"href\":\"/\",\"children\":[\"$\",\"button\",null,{\"className\":\"focus:shadow-outline-blue inline rounded-lg border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium leading-5 text-white shadow transition-colors duration-150 hover:bg-blue-700 focus:outline-none dark:hover:bg-blue-500\",\"children\":\"返回主页\"}]}]]}]]}]]}],[\"$\",\"footer\",null,{\"children\":[\"$\",\"div\",null,{\"className\":\"mt-16 flex flex-col items-center\",\"children\":[\"$\",\"div\",null,{\"className\":\"mb-2 flex space-x-2 text-sm text-gray-500 dark:text-gray-400\",\"children\":[[\"$\",\"div\",null,{\"children\":\"© 2023\"}],[\"$\",\"div\",null,{\"children\":\" • \"}],[\"$\",\"$L7\",null,{\"href\":\"/\",\"children\":\"HAN|博客\"}]]}]}]}]]}]}],[\"$\",\"div\",null,{}]]}]]}],\"asNotFound\":false,\"children\":[[\"$\",\"html\",null,{\"lang\":\"zh-CN\",\"className\":\"scroll-smooth dark\",\"children\":[[\"$\",\"meta\",null,{\"charSet\":\"utf-8\"}],[\"$\",\"body\",null,{\"children\":[[\"$\",\"div\",null,{\"className\":\"mx-auto max-w-3xl px-4 sm:px-6 xl:max-w-5xl xl:px-0\",\"children\":[\"$\",\"div\",null,{\"className\":\"h-screen flex flex-col justify-between\",\"children\":[[\"$\",\"header\",null,{\"className\":\"flex items-center justify-around py-10\",\"children\":[[\"$\",\"div\",null,{\"children\":[\"$\",\"$L7\",null,{\"href\":\"/\",\"children\":[\"$\",\"div\",null,{\"className\":\"flex items-center justify-between\",\"children\":[\"$\",\"div\",null,{\"className\":\"hidden h-6 text-2xl font-semibold sm:block\",\"children\":[\"$\",\"a\",null,{\"children\":\"HAN个人博客\"}]}]}]}]}],[\"$\",\"div\",null,{\"className\":\"flex items-center text-base leading-5\",\"children\":[\"$\",\"div\",null,{\"className\":\"hidden sm:block\",\"children\":[[\"$\",\"$L7\",\"/\",{\"href\":\"/\",\"className\":\"p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4\",\"children\":\"主页\"}],[\"$\",\"$L7\",\"/articles\",{\"href\":\"/articles\",\"className\":\"p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4\",\"children\":\"文章\"}],[\"$\",\"$L7\",\"/about\",{\"href\":\"/about\",\"className\":\"p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4\",\"children\":\"关于\"}]]}]}],[\"$\",\"div\",null,{}]]}],[\"$\",\"main\",null,{\"className\":\"mb-auto\",\"children\":[\"$\",\"$L8\",null,{\"parallelRouterKey\":\"children\",\"segmentPath\":[\"children\"],\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"loading\":\"$undefined\",\"loadingStyles\":\"$undefined\",\"hasLoading\":false,\"template\":[\"$\",\"$L9\",null,{}],\"templateStyles\":\"$undefined\",\"notFound\":[\"$\",\"div\",null,{\"className\":\"flex flex-col items-start justify-start md:mt-24 md:flex-row md:items-center md:justify-center md:space-x-6\",\"children\":[[\"$\",\"div\",null,{\"className\":\"space-x-2 pt-6 pb-8 md:space-y-5\",\"children\":[\"$\",\"h1\",null,{\"className\":\"text-6xl font-extrabold leading-9 tracking-tight text-gray-900 dark:text-gray-100 md:border-r-2 md:px-6 md:text-8xl md:leading-14\",\"children\":\"404\"}]}],[\"$\",\"div\",null,{\"className\":\"max-w-md\",\"children\":[[\"$\",\"p\",null,{\"className\":\"mb-4 text-xl font-bold leading-normal md:text-2xl\",\"children\":\"抱歉，这个页面暂时没找到\"}],[\"$\",\"p\",null,{\"className\":\"mb-8\",\"children\":\"别急，您可以可以返回首页找找！\"}],[\"$\",\"$L7\",null,{\"href\":\"/\",\"children\":[\"$\",\"button\",null,{\"className\":\"focus:shadow-outline-blue inline rounded-lg border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium leading-5 text-white shadow transition-colors duration-150 hover:bg-blue-700 focus:outline-none dark:hover:bg-blue-500\",\"children\":\"返回主页\"}]}]]}]]}],\"notFoundStyles\":[],\"asNotFound\":false,\"childProp\":{\"current\":[[\"$\",\"$La\",null,{\"children\":[\"$\",\"$L8\",null,{\"parallelRouterKey\":\"children\",\"segmentPath\":[\"children\",\"articles\",\"children\"],\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"loading\":\"$undefined\",\"loadingStyles\":\"$undefined\",\"hasLoading\":false,\"template\":[\"$\",\"$L9\",null,{}],\"templateStyles\":\"$undefined\",\"notFound\":\"$undefined\",\"notFoundStyles\":\"$undefined\",\"asNotFound\":false,\"childProp\":{\"current\":[\"$\",\"$L8\",null,{\"parallelRouterKey\":\"children\",\"segmentPath\":[\"children\",\"articles\",\"children\",[\"slug\",\"hooks\",\"d\"],\"children\"],\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"loading\":\"$undefined\",\"loadingStyles\":\"$undefined\",\"hasLoading\":false,\"template\":[\"$\",\"$L9\",null,{}],\"templateStyles\":\"$undefined\",\"notFound\":\"$undefined\",\"notFoundStyles\":\"$undefined\",\"asNotFound\":false,\"childProp\":{\"current\":[\"$Lb\",null],\"segment\":\"__PAGE__?{\\\"slug\\\":\\\"hooks\\\"}\"},\"styles\":[]}],\"segment\":[\"slug\",\"hooks\",\"d\"]},\"styles\":[]}],\"params\":{}}],null],\"segment\":\"articles\"},\"styles\":[[\"$\",\"link\",\"0\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/css/7f6bd37aab40623f.css\",\"precedence\":\"next\"}]]}]}],[\"$\",\"footer\",null,{\"children\":[\"$\",\"div\",null,{\"className\":\"mt-16 flex flex-col items-center\",\"children\":[\"$\",\"div\",null,{\"className\":\"mb-2 flex space-x-2 text-sm text-gray-500 dark:text-gray-400\",\"children\":[[\"$\",\"div\",null,{\"children\":\"© 2023\"}],[\"$\",\"div\",null,{\"children\":\" • \"}],[\"$\",\"$L7\",null,{\"href\":\"/\",\"children\":\"HAN|博客\"}]]}]}]}]]}]}],[\"$\",\"div\",null,{}]]}]]}],null]}]]\n"])</script><script>self.__next_f.push([1,"b:[\"$\",\"div\",null,{\"className\":\"flex justify-center\",\"children\":[\"$\",\"div\",null,{\"className\":\"prose dark:prose-invert mt-10\",\"children\":[[\"$\",\"h1\",null,{\"children\":\"如何避免 React hooks 闭包陷阱？\"}],[\"$\",\"div\",null,{\"className\":\"items-center\",\"children\":[\"$\",\"$L7\",null,{\"href\":\"articles\",\"children\":\"返回文档列表\"}]}],[\"$\",\"div\",null,{\"dangerouslySetInnerHTML\":{\"__html\":\"\u003ch2\u003e什么是 React hooks 闭包陷阱？\u003c/h2\u003e\\n\u003cp\u003e在 react 中 提供了一些性能优化函数 \u003ccode\u003ereact.memo\u003c/code\u003e 、\u003ccode\u003euseMemo\u003c/code\u003e、\u003ccode\u003euseCallback\u003c/code\u003e。\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003econst cachedValue = useMemo((fn) =\u003e calculateValue, dependencies)\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e\u003cstrong\u003euseMemo\u003c/strong\u003e：memoized 值，只有依赖项变更的时候才会重新计算\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003econst cachedFn = useCallback(fn, dependencies)\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e\u003cstrong\u003euseCallback\u003c/strong\u003e：memoized 函数，只有依赖项变更的时候才会重新更新\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003econst MemoizedComponent = memo(SomeComponent, arePropsEqual?)\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e\u003cstrong\u003ememo\u003c/strong\u003e：缓存组件，当 props 没变化的时候，不会执行 render。\u003ccode\u003earePropsEqual\u003c/code\u003e 是一个可选函数，可以自定义对比新旧的 \u003ccode\u003eprops\u003c/code\u003e, 返回 \u003ccode\u003etrue\u003c/code\u003e 就会缓存，返回 \u003ccode\u003efalse\u003c/code\u003e，就不会缓存。\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003econst arePropsEqual=(oldProps: Props, newProps: Props) =\u003e boolean\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e有时候我们使用了这些函数来优化性能，这些函数与外围的 state 形成闭包，导致缓存函数中获取到的 state 不是最新的值，这就是闭包陷阱。\u003c/p\u003e\\n\u003ch2\u003e实例演示\u003c/h2\u003e\\n\u003cp\u003e比如下面代码，在项目中有一个计时器组件，还有一个 \u003ccode\u003eChild\u003c/code\u003e 组件, 点击 \u003ccode\u003eChild\u003c/code\u003e 组件需要返回 App 组件中的最新 \u003ccode\u003estate\u003c/code\u003e 值；\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003eimport React, { useCallback, useEffect, useLayoutEffect } from 'react'\\nimport 'antd/dist/antd.css'\\nimport { Button, ButtonProps } from 'antd'\\n\\nconst Child = ({ onClick }: ButtonProps) =\u003e {\\n  console.log('render')\\n  return (\\n    \u0026#x3C;Button onClick={onClick} type=\\\"primary\\\"\u003e\\n      Button\\n    \u0026#x3C;/Button\u003e\\n  )\\n}\\n\\nconst App: React.FC = () =\u003e {\\n  const [count, setCount] = React.useState(0)\\n\\n  useEffect(() =\u003e {\\n    const time = setInterval(() =\u003e {\\n      setCount((count) =\u003e count + 1)\\n    }, 1000)\\n    return () =\u003e {\\n      clearInterval(time)\\n    }\\n  }, [])\\n\\n  const handleClick = () =\u003e {\\n    console.log(count)\\n  }\\n\\n  return (\\n    \u0026#x3C;\u003e\\n      \u0026#x3C;h2\u003e{count}\u0026#x3C;/h2\u003e\\n      \u0026#x3C;Child onClick={handleClick} /\u003e\\n    \u0026#x3C;/\u003e\\n  )\\n}\\n\\nexport default App\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e这样没什么问题，但是每次渲染的时候 \u003ccode\u003eChild\u003c/code\u003e 组件都会执行 render\u003c/p\u003e\\n\u003cp\u003e\u003cimg src=\\\"https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/0ffc82d64fd84254b2a988cb0f340bdd~tplv-k3u1fbpfcp-watermark.image?\\\" alt=\\\"image.png\\\"\u003e\u003c/p\u003e\\n\u003cp\u003e为了防止 App 组件在更新的时候，不重复渲染（render）子组件，我们使用 \u003ccode\u003eReact.memo\u003c/code\u003e 包裹下 \u003ccode\u003eChild\u003c/code\u003e 组件， \u003ccode\u003ehandleClick\u003c/code\u003e 也需要使用 \u003ccode\u003euseCallback\u003c/code\u003e 包裹，这样 \u003ccode\u003eChild\u003c/code\u003e 组件只会 render 一次。\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003econst Child = React.memo(({ onClick }: ButtonProps) =\u003e {\\n  console.log('render')\\n  return (\\n    \u0026#x3C;Button onClick={onClick} type=\\\"primary\\\"\u003e\\n      Button\\n    \u0026#x3C;/Button\u003e\\n  )\\n})\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cpre\u003e\u003ccode\u003econst handleClick = useCallback(() =\u003e {\\n    console.log(count);\\n  }, []);\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e这样一来 \u003ccode\u003euseCallback\u003c/code\u003e 和 state 就形成了一个闭包，每次打印的 state 就是初始化的 state。\u003c/p\u003e\\n\u003cp\u003e\u003cimg src=\\\"https://p1-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/d18a20ad358d44a29ef944ca483489da~tplv-k3u1fbpfcp-watermark.image?\\\" alt=\\\"image.png\\\"\u003e\u003c/p\u003e\\n\u003cp\u003e为了获得最新的 state 值，必须将 count 参数写进 useCallback 的第二个参数。\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003econst handleClick = useCallback(() =\u003e {\\n  console.log(count)\\n}, [count])\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e但这样，又会导致 \u003ccode\u003eChild\u003c/code\u003e 组件更新。那么有什么好的解决办法呢？既能防止子组件的更新，又可以获取到最新的 \u003ccode\u003estate\u003c/code\u003e 值呢？\u003c/p\u003e\\n\u003cp\u003e\u003cstrong\u003e方法：\u003c/strong\u003e\u003c/p\u003e\\n\u003cp\u003e我们可以使用 \u003ccode\u003euseRef\u003c/code\u003e 来存一个函数，每次更新的时候设置 \u003ccode\u003eref.current\u003c/code\u003e 的值，通过函数来获取最新的 \u003ccode\u003estate\u003c/code\u003e 值。\u003c/p\u003e\\n\u003cpre\u003e\u003ccode\u003econst App: React.FC = () =\u003e {\\n  const [count, setCount] = React.useState(0);\\n  const ref = React.useRef\u0026#x3C;VoidFunction\u003e();\\n\\n  useEffect(() =\u003e {\\n    const time = setInterval(() =\u003e {\\n      setCount((count) =\u003e count + 1);\\n    }, 1000);\\n    return () =\u003e {\\n      clearInterval(time);\\n    };\\n  }, []);\\n\\n  const fn = () =\u003e {\\n    console.log(count);\\n  };\\n\\n  ref.current = fn;\\n\\n  const handleClick = useCallback(() =\u003e {\\n    ref.current();\\n  }, []);\\n\\n  return (\\n    \u0026#x3C;\u003e\\n      \u0026#x3C;h2\u003e{count}\u0026#x3C;/h2\u003e\\n      \u0026#x3C;Child onClick={handleClick} /\u003e\\n    \u0026#x3C;/\u003e\\n  );\\n};\\n\\n\u003c/code\u003e\u003c/pre\u003e\\n\u003cp\u003e\u003cimg src=\\\"https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/36531d7c4f1f4c6d987991568df7a2dc~tplv-k3u1fbpfcp-watermark.image?\\\" alt=\\\"image.png\\\"\u003e\u003c/p\u003e\\n\u003cp\u003e\u003ca href=\\\"https://codesandbox.io/s/an-niu-lei-xing-antd-4-24-2-forked-wv1w0q?file=/demo.tsx\\\"\u003ecodesandbox 演示地址\u003c/a\u003e\u003c/p\u003e\\n\u003ch2\u003e小结\u003c/h2\u003e\\n\u003cp\u003e解决闭包陷阱的方法\u003c/p\u003e\\n\u003col\u003e\\n\u003cli\u003e\\n\u003cp\u003e当页面更新不频繁的时候，不使用 \u003ccode\u003euseMemo\u003c/code\u003e、\u003ccode\u003euseCallback\u003c/code\u003e 缓存函数来优化页面；\u003c/p\u003e\\n\u003c/li\u003e\\n\u003cli\u003e\\n\u003cp\u003e将更新依赖的参数写进 \u003ccode\u003euseCallback\u003c/code\u003e 的第二个参数\u003c/p\u003e\\n\u003c/li\u003e\\n\u003cli\u003e\\n\u003cp\u003e使用 \u003ccode\u003euseRef\u003c/code\u003e 来存在一个函数，用一个函数实时获取最新的 \u003ccode\u003estate\u003c/code\u003e 值\u003c/p\u003e\\n\u003c/li\u003e\\n\u003c/ol\u003e\\n\u003cp\u003e以上就是本文全部内容，如果对你有帮助，可以随手点个赞，这对我真的很重要，希望这篇文章对大家有所帮助，也可以参考我往期的文章或者在评论区交流你的想法和心得，欢迎一起探索前端。\u003c/p\u003e\\n\u003cblockquote\u003e\\n\u003cp\u003e本文正在参加\u003ca href=\\\"https://juejin.cn/post/7162096952883019783\\\" title=\\\"https://juejin.cn/post/7162096952883019783\\\"\u003e「金石计划 . 瓜分 6 万现金大奖」\u003c/a\u003e\u003c/p\u003e\\n\u003c/blockquote\u003e\\n\"}}],[\"$\",\"div\",null,{\"className\":\"items-center\",\"children\":[\"$\",\"$L7\",null,{\"href\":\"articles\",\"children\":\"返回文档列表\"}]}]]}]}]\n"])</script><script>self.__next_f.push([1,"5:[[[\"$\",\"meta\",null,{\"charSet\":\"utf-8\"}],[\"$\",\"title\",null,{\"children\":\"HAN Blog\"}],[\"$\",\"meta\",null,{\"name\":\"description\",\"content\":\"Created by HAN\"}],null,null,null,null,null,null,null,null,[\"$\",\"meta\",null,{\"name\":\"viewport\",\"content\":\"width=device-width, initial-scale=1\"}],null,null,null,null,null,null,null,null,null,null,[]],[null,null,null,null],null,null,[null,null,null,null,null],null,null,null,null,[null,[[\"$\",\"link\",null,{\"rel\":\"icon\",\"href\":\"\\\\favicon.ico\",\"type\":\"image/x-icon\",\"sizes\":\"any\"}]],[],null]]\n"])</script>
